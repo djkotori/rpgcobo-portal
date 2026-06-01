@@ -1,0 +1,29 @@
+{
+	"appname" : "RPG-Cobo :portal",
+	"languagelist" : [
+		{ "code":"en",		"name":"English",			"name_en":"English",			"country":"us",		"icon":"🇺🇸" },
+		{ "code":"ja",		"name":"日本語",			"name_en":"Japanese",			"country":"jp", 	"icon":"🇯🇵" },
+		{ "code":"zh-CN",	"name":"简体中文",			"name_en":"Chinese (China)",	"country":"cn", 	"icon":"🇨🇳" },
+		{ "code":"zh-TW",	"name":"繁體中文",			"name_en":"Chinese (Taiwan)",	"country":"tw", 	"icon":"🇹🇼" },
+		{ "code":"ko",		"name":"한국어",			"name_en":"Korean",				"country":"kr", 	"icon":"🇰🇷" },
+		{ "code":"de",		"name":"Deutsch",			"name_en":"German",				"country":"de", 	"icon":"🇩🇪" },
+		{ "code":"fr",		"name":"Français",			"name_en":"French",				"country":"fr", 	"icon":"🇫🇷" },
+		{ "code":"es",		"name":"Español",			"name_en":"Spanish",			"country":"es", 	"icon":"🇪🇸" },
+		{ "code":"pt",		"name":"Português",			"name_en":"Portuguese",			"country":"pt", 	"icon":"🇵🇹" },
+		{ "code":"ru",		"name":"Русский",			"name_en":"Russian",			"country":"ru", 	"icon":"🇷🇺" },
+		{ "code":"id",		"name":"bahasa Indonesia",	"name_en":"Indonesian",			"country":"id", 	"icon":"🇮🇩" },
+		{ "code":"vi",		"name":"Tiếng Việt",		"name_en":"Vietnamese",			"country":"vn", 	"icon":"🇻🇳" }
+	],
+	"packagerule" : [
+		{ "name":"data"  , "includes":["/**"] }
+	],
+	"permission":{
+		"https":[1],
+		"connect":[3],
+		"bind":[3],
+		"file":[7],
+		"addon":[1],
+		"openurl":[1],
+		"popen":[1]
+	}
+}

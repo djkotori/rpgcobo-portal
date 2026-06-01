@@ -1,0 +1,320 @@
+
+import VirtualKeyCode;
+import ModifiersMask;
+import FileDialogMode;
+import PropertyType;
+
+::uiscalelist <- [
+	{ lbl="75%", id="uiscale", val=75 }
+	{ lbl="100%", id="uiscale", val=100 }
+	{ lbl="110%", id="uiscale", val=110 }
+	{ lbl="125%", id="uiscale", val=125 }
+	{ lbl="150%", id="uiscale", val=150 }
+	{ lbl="200%", id="uiscale", val=200 }
+];
+
+local autochklist = [
+	{ lbl="$T.lbl_none", val=0, }
+	{ lbl="$T.autochk_always", val=-1, }
+	{ lbl="$T.autochk_onceaday", val=24*60*60 }
+]
+
+local props = [
+	// {
+	// 	pid="uiscale", lbl="UI $T.lbl_scale", type=LIST, list=uiscalelist,
+	// },
+	{
+		ctg="general", pid="backupexpire", lbl="$T.lbl_backupexpire", type=SCALAR, range=(1,100),
+	},
+	{
+		ctg="general", pid="autochk", lbl="$T.lbl_update_autochk", type=LIST, list=autochklist,
+	},
+	{
+		ctg="general", pid="update_nightly", lbl="$T.lbl_update_nightly", type=BOOL, defval=false,
+	},
+	{
+		ctg="general", pid="asseturls", lbl="$T.lbl_manageassets", type=991231, cnt="cnt6.ui",
+		needreload=true,
+	},
+];
+
+local useprops = { uiscale=1, lang=1,};
+
+preferenceprops = preferenceprops.filter( @( v) useprops[v.pid]) ... props;
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+//	アセットURLの管理用プロパティ
+
+class PropertyBehaviors.AssetURLs extends PropertyBehavior
+{
+	static proptype = 991231;
+	static uipath = "/ui/prop_asseturls.ui"
+	static menuitems = [
+		{ id="newurl", lbl="$T.lbl_add_asseturl", icon="\ue147"},
+		{ id="reset", lbl="$T.lbl_resetinit", icon="\ue0b8"},
+	];
+	
+	urllist = null;	//	ListBehavior
+
+	function init(){
+		urllist = ListBehavior( view.findChild( "urllist"));
+		urllist.dndfunc = 3;
+		urllist.listview.addEventListener( ACTION_EVENT, listevent);
+		urllist.listview.addEventListener( ITEM_EVENT, listevent);
+	}
+
+	function getParam(){
+		return urllist.items.map( @( v) v.val);
+	}
+	
+	function setParam( v){
+		if( v){
+			urllist.setListItems( v.map( @( v)+{ lbl=v, val=v}));
+		}
+	}
+	
+	function paramevent( e){
+	}
+
+	function menuSelected( e, mi){
+		switch( mi.id){
+		case "newurl":
+			local newurl = AssetURLDialog.run( "");
+			if( newurl){
+				urllist.items[0] <- {lbl=newurl, val=newurl};
+				urllist.refreshItems();
+				postActionEvent( true);
+			}
+			break;
+		case "reset":
+			setParam( [ProjectOp.env.repo_asset]);
+			postActionEvent( true);
+			break;
+		}
+	}
+
+	function listevent( e){
+		local cmd = e.actioncmd;
+		if( !cmd) return;
+		switch( e.id){
+		case ACTION_PERFORMED:
+			if( e.isMouseDown( BUTTON2_MASK)){
+				if( cmd) urllist.setSelectedItem( cmd);
+				showItemContextMenu( e);
+			}else
+			if( e.isMouseDown( BUTTON1_MASK)){
+				if( cmd){
+					local newurl = AssetURLDialog.run( cmd.val);
+					if( newurl && newurl != cmd.val){
+						cmd.lbl = cmd.val = newurl;
+						urllist.refreshItems();
+						postActionEvent( true);
+					}
+				}
+			}
+			break;
+		}
+	}
+
+	function showItemContextMenu( e){
+		local ctxmenu = [
+			{ id="edit", lbl="$T.lbl_edit", icon="\ue745", disable=!e.actioncmd },
+			{ id="newurl", lbl="$T.lbl_add_asseturl", icon="\ue147"},
+			"-",
+			{ id="delete", lbl="$T.lbl_delete", icon="\ue872", disable=!e.actioncmd||length( urllist.items)<=1},
+		];
+		local cmd = e.actioncmd;
+		switch( MenuPopup.run( ctxmenu)["id"]){
+		case "edit":
+			local newurl = AssetURLDialog.run( cmd.val);
+			if( newurl && newurl != cmd.val){
+				cmd.lbl = cmd.val = newurl;
+				urllist.refreshItems();
+				postActionEvent( true);
+			}
+			break;
+		case "delete":
+			urllist.items.removeValue( cmd);
+			urllist.refreshItems();
+			postActionEvent( true);
+			break;
+		}
+	}
+}
+
+//	アセットURLを追加・編集するためのダイアログ。
+//	
+//	
+class AssetURLDialog extends Dialog
+{
+	urledit = null;
+	urlchanged = null;
+	branchmenu = null;
+	//	
+	repourl0 = null;
+	url = null;
+	branch = null;
+	checkthread = null;
+
+	static function run( repourl){
+		local dlg = this( "/ui/asseturldialog.ui", repourl);
+		dlg.show();
+		return dlg.ret;
+	}
+
+	constructor( v, u){
+		super( v);
+		urledit = view.findChild( "urledit");
+		urledit.addEventListener( TEXT_EVENT, urltextevent);
+		urlchanged = view.findChild( "urlchanged");
+		branchmenu = MenuBehavior( view.findChild( "branchmenu"));
+		local i = u.lastIndexOf( ",");
+		repourl0 = u;
+		if( i>=0){
+			url = u.substring( 0, i);
+			branch = u.substring( i+1);
+		} else {
+			url = u;
+			branch = "main";
+		}
+		urledit.setText( url);
+		branchmenu.setMenu( [{lbl=branch, branch=branch}]);
+		startCheckURL( 0);
+	}
+
+	function startCheckURL( delay){
+		if( checkthread) checkthread.wakeupThrow( "interrupt");
+		checkthread = newthread();
+		checkthread.start( @(){
+			try{
+				sleep( delay);
+				checkURL();
+			}catch( ex){
+				printexception( ex);
+			}
+			checkthread = null;
+		}, this);
+	}
+
+	function setMessage( s, i=null){
+		local w = view.findChild( "wait1");
+		local msg = view.findChild( "msg");
+		local resicon = view.findChild( "resicon");
+		msg.setText( rtf( s));
+		if( i){
+			resicon.setText( rtf( i));
+			w.setVisible( false);
+		}else{
+			resicon.setText( "");
+			w.setVisible( true);
+			w.action( "start");
+		}
+	}
+
+	//	
+	function checkURL(){
+		local branchg = view.findChild( "branchg");
+		local btng = view.findChild( "btng");
+		local ishttp = url.startsWith( "http");
+		local repourl = ishttp ? url..","..branch : url;	//	url,branch
+		setMessage( "[#eee]$T.lbl_checkurl", null);
+		branchg.anime( 0);
+		btng.anime( 0);
+		if( length( url) < 6){
+			return setMessage( "[#bff]$T.lbl_specifygit", "[#bff]\ue88e");
+		}
+		if( ishttp){
+			//	ブランチを取得
+			local gitexe = ProjectOp.gitExe();
+			local r = ::exec( gitexe, ["ls-remote","--heads", url], true);
+			if( r.exitcode){
+				setMessage( "[#fc0]$T.lbl_giturl_error", "[#fc0]\ue8b2");
+				return;
+			}else{
+				local s = r.stdout.asText();
+				local a = s.split( "\n").filter( @( v) v.contains( "refs/heads/")).map( @( v){
+					local hash = v.substring( 0, v.indexOf( '\t'));
+					local branch = v.substring( v.indexOf( "refs/heads/")+11).trim();
+					return { lbl=branch, branch=branch };
+				});
+				branchmenu.setMenu( a);
+				local br = branch;
+				if( !branchmenu.selectItem( @( v) v.branch==br)){	//	ブランチが無い場合は先頭の物を。。。
+					local v = branchmenu.menuitems[0];
+					branchmenu.selectItem( v);
+					branch = v.branch;
+				}
+			}
+			//	リポジトリは有効。中身にrpgcobo_templates.jsonや、rpgcobo_assets.jsonがあるかチェック。
+			local repodir = ProjectOp.getAssetDir( repourl);
+			if( repodir.isDirectory()){	//	既にリポジトリはダウンロード済み。この場合は必要なリソースのチェックは不要。
+			}else{
+				//	未ダウンロードのリポジトリ。ファイルがあるかの確認のために以下のgitコマンドでチェックの必要あり。
+				//	git clone --no-checkout --depth 1 --filter blob:none -b dev https://.../repo.git .
+				//	git ls-tree --name-only HEAD
+				local tmpdir = ProjectOp.getTempDir();
+				local r = ::exec( "cmd.exe", [
+					"/c", "cd", tmpdir.nativepath, "&", 
+					gitexe.nativepath, "clone", "--no-checkout", "--depth", "1", "--filter", "blob:none", "-b", branch, url, ".", "&",
+					gitexe.nativepath, "ls-tree", "--name-only", "HEAD",
+				""], true);
+				local s = r.stdout.asText();
+				local b = s.contains( "rpgcobo_templates.json") || s.contains( "rpgcobo_resources.json");
+				if( !b){
+					return setMessage( "[#bff]$T.lbl_assetgit_ng", "[#bff]\ue88e");
+				}
+				tmpdir.deleteAll();
+			}
+			branchg.anime( 1);
+			setMessage( "[#ad0]$T.lbl_assetgit_ok", "[#ad0]\ue86c");
+		}else{
+			local repodir = ProjectOp.getAssetDir( repourl);
+			local tmplfile = FileRef( repodir, "rpgcobo_templates.json");
+			if( !tmplfile.exists()){
+				//	アセットが存在しない。エラー状態。
+				return setMessage( "[#fc0]$T.lbl_assetdir_ng", "[#fc0]\ue8b2");
+			}
+			setMessage( "[#ad0]$T.lbl_assetdir_ok", "[#ad0]\ue86c");
+		}
+		local b = ishttp ? url..","..branch : url;
+		btng.anime( repourl0!=repourl ? 1:0);
+	}
+
+	function urltextevent( e){
+		urlchanged?.setVisible( url != urledit.getText());
+		view.findChild( "btng").anime( 0);
+	}
+
+	function actionevent( e){
+		switch( e.src["name"]){
+		case "urledit":
+			url = urledit.getText();
+			urlchanged.setVisible( false);
+			startCheckURL( 300);
+			break;
+		case "referbtn":
+			{
+				local d = FileDialog();
+				d.setTitle( lang( T.dlg_dir_select));
+				d.setMode( FILEDIALOG_SELECTDIR);
+				local dir = url.startsWith( "http") ? FileRef( skGetDocumentDir()) : FileRef( url);
+				d.setFile( dir);
+				d.show();
+				while( d.isShown()) suspend();
+				local p = d.getResult();
+				if( p){
+					urledit.setText( p);
+					url = p;
+					branch = "main";
+					startCheckURL( 300);
+				}
+			}
+			break;
+		case "btn_create":
+			ret = url;
+			close();
+			break;
+		}
+		super.actionevent( e);
+	}
+}

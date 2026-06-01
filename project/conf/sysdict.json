@@ -1,0 +1,90 @@
+{
+	"none":{ "ja":"なし", "en":"None"},
+	
+	"window_size":{ "ja":"ウィンドウ解像度", "en":"Window Resolition" },
+	"screen_size":{ "ja":"フルスクリーン解像度", "en":"Fullscreen Resolition" },
+	"screen_mode":{ "ja":"フルスクリーン", "en":"Fullscreen" },
+
+	"render_quality":{ "ja":"レンダリング品質", "en":"Rendering Quality" },
+	"render_quality0":{ "ja":"0:最高速", "en":"0:Fastest" },
+	"render_quality1":{ "ja":"1:高速", "en":"1:Fast" },
+	"render_quality2":{ "ja":"2:標準", "en":"2:Normal" },
+	"render_quality3":{ "ja":"3:高品質", "en":"3:High" },
+	"render_quality4":{ "ja":"4:最高品質", "en":"4:Highest" },
+	
+	"main_vol":{ "ja":"メイン音量", "en":"Main Volume" },
+	"bgm_vol":{ "ja":"BGMの音量", "en":"BGM Volume" },
+	"se_vol":{ "ja":"効果音の音量", "en":"SE Volume" },
+
+	"use_gamepad":{ "ja":"ゲームパッドの使用", "en":"Gamepad Usage" },
+	"use_gamepad0":{ "ja":"使用しない", "en":"Disable" },
+	"use_gamepad1":{ "ja":"確認する", "en":"Ask" },
+	"use_gamepad2":{ "ja":"使用する", "en":"Enable" },
+	"swap_ab":{ "ja":"決定／キャンセルボタンを反転", "en":"Swap OK/Cancel Buttons" },
+	
+	"save_cursor":{ "ja":"カーソル位置を保存", "en":"Save cursor position" },
+	"button_help":{ "ja":"ボタン操作のヘルプを表示", "en":"Show help for Buttons" },
+
+	"button_fmt":{ "ja":"%S ボタン", "en":"%S Button" },
+	"stick_fmt":{ "ja":"%S スティック", "en":"%S Stick" },
+	"trigger_fmt":{ "ja":"%S トリガー", "en":"%S トリガー" },
+
+	"cmdtgt"	: {"ja":"対象範囲", "en":"Target"},
+	"cmdtgt0"	: {"ja":"対象なし", "en":"No Target"},
+	"cmdtgt1"	: {"ja":"敵単体", "en":"Single Enemy"},
+	"cmdtgt2"	: {"ja":"敵ランダム", "en":"Random Enemy"},
+	"cmdtgt3"	: {"ja":"敵範囲3M", "en":"Enemies in 3M"},
+	"cmdtgt4"	: {"ja":"敵範囲6M", "en":"Enemies in 6M"},
+	"cmdtgt5"	: {"ja":"敵縦一列", "en":"Enemies in Vert"},
+	"cmdtgt6"	: {"ja":"敵横一列", "en":"Enemies in Hori"},
+	"cmdtgt7"	: {"ja":"敵全体", "en":"All Enemies"},
+	"cmdtgt8"	: {"ja":"味方単体", "en":"Single Friend"},
+	"cmdtgt9"	: {"ja":"味方縦一列", "en":"Friends in Vert"},
+	"cmdtgt10"	: {"ja":"味方全体", "en":"All Friends"},
+	"cmdtgt11"	: {"ja":"自分自身", "en":"Myself"},
+	"cmdtgt12"	: {"ja":"無差別単体", "en":"Anyone"},
+	"cmdtgt13"	: {"ja":"無差別ランダム", "en":"Any Random"},
+	"cmdtgt14"	: {"ja":"無差別全体", "en":"Everyone"},
+
+	"consumefmt":{ "ja":"消費%S", "en":"%S consumes"},
+	"noconsume":{ "ja":"なし", "en":"None"},
+
+	"btn_apply":{ "ja":"決定", "en":"Apply"},
+	"btn_back":{ "ja":"戻る", "en":"Back"},
+	"btn_sort":{ "ja":"並び替え", "en":"Sort"},
+	"btn_auto":{ "ja":"オートON/OFF", "en":"Auto ON/OFF"},
+	"btn_ff":{ "ja":"早送り", "en":"Fast forward"},
+	"btn_menu":{ "ja":"メインメニュー", "en":"Main menu"},
+	"btn_search":{ "ja":"調べる", "en":"Check"},
+	"btn_talk":{ "ja":"話す", "en":"Talk"},
+	"btn_sell":{ "ja":"売る","en":"Sell"},
+
+	"buyitem":{ "ja":"%S を購入", "en":"Buy %S"},
+	"sellitem":{ "ja":"%S を売却", "en":"Sell %S"},
+	
+	"load":{ "ja":"ロード", "en":"Load"},
+	"save":{ "ja":"セーブ", "en":"Save"},
+	"copy":{ "ja":"コピー", "en":"Copy"},
+	"del":{ "ja":"消去", "en":"Delete"},
+	"nodata":{ "ja":"データがありません", "en":"No SaveData"},
+
+	"selchara":{ "ja":"キャラを選択してください", "en":"Select a Character"},
+	"useitem":{ "ja":"アイテムを使用", "en":"Use the Item"},
+	
+	"opt_status":{ "ja":"パラメータ変化", "en":"Change Parameter"},
+	"opt_tribe":{ "ja":"種族設定", "en":"Set Tribes"},
+	"opt_conddef":{ "ja":"コンディション耐性", "en":"Condition Defence"},
+	"opt_elemdef":{ "ja":"属性耐性", "en":"Element Defence"},
+	"opt_getskill":{ "ja":"スキル習得", "en":"Learn Skill"},
+	"opt_getjob":{ "ja":"ジョブ習得", "en":"Learn Job"},
+	"opt_battlecmd":{ "ja":"バトルコマンド設定", "en":"Set BattleCommand"},
+	"opt_elemsp":{ "ja":"属性特効", "en":"Element Attack up"},
+	"opt_tribesp":{ "ja":"種族特効", "en":"Tribe Attack up"},
+	"opt_weaponsp":{ "ja":"武器特効", "en":"Weapon Attack up"},
+	"opt_defrate":{ "ja":"被ダメージ率", "en":"Defence up"},
+	"opt_eqflag":{ "ja":"装備フラグ設定", "en":"Equipment Flag"},
+	"opt_jobflag":{ "ja":"ジョブフラグ設定", "en":"Job Flag"},
+	"opt_bossflag":{ "ja":"ボスフラグ設定", "en":"Boss Flag"},
+	
+	"":0
+}

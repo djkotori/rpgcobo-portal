@@ -1,0 +1,221 @@
+//
+//	Markdownを@textlint/markdown-to-astでパースしたjsonを表示する
+//	
+//	ブロック要素	Document, Header, List, ListItem, HorizontalRule, Paragraph
+//	インライン要素	Break, Emphasis, Strong, Str, Link
+//	
+//	インライン要素は一つのラベルに収まる。ただ、Linkはどうやってやるかなー。。未対応でも良いかも
+//	テーブルも未対応。
+
+class SKMarkdownNode extends SKView
+{
+	static nostretchinner = true;
+
+	indent = 0;			//	内部要素のインデント幅
+	marginu = 0;
+	margind = 4;
+
+	ast = null;
+
+	function setup( t){
+		ast = t;
+	}
+
+	//	
+	function setWidth( w){
+		local iw = w-indent;
+		local y = marginu;
+		foreach( c in children){
+			c.setWidth( iw);
+			c.pos( indent, y, 0);
+			y += c.bnd.h;
+		}
+		bnd.set( 0, 0, w, y+margind);
+	}
+	
+	function getTextBuffer( n){
+		if( !n){
+			n = StringBuffer();
+		}
+		return n;
+	}
+
+	function makeFontAttribute(){
+		return FontAttribute( Fonts.get( "ui"), 16, 0xffffffff, 0);
+	}
+
+	function breakTextBuffer( n){
+		if( n){	//	ここはとにかく非効率だが問題になるほどではないはず。。。
+			local lbl = SKLabelView( "", makeFontAttribute());
+			lbl.textbox.wrapmode = 2;
+			local rtf = RichText( string( n));
+			rtf.applyToLabel( lbl);
+			local node = SKMarkdownText();
+			node.setTextBox( lbl.textbox);
+			addChild( node);
+		}
+	}
+
+	function isInline( type){
+		local list = #["Break","Str","Strong","Emphasis","Link"];
+		return list.contains( type);
+	}
+	
+	function buildChildren( t){
+		local tn;
+		foreach( c in t.children){
+			if( isInline( c.type)){
+				tn = getTextBuffer( tn);
+				buildInlineText( tn, c);	//	RichText構文にするかなー
+			}else{
+				tn = breakTextBuffer( tn);
+				local cn = createMarkdownNode( c);
+				if( cn) addChild( cn);
+			}
+		}
+		breakTextBuffer( tn);
+	}
+	
+	static function createMarkdownNode( t){
+		local node = null;
+		switch( t.type){
+		case "Document": node = SKMarkdownDocument(); break;
+		case "Paragraph": node = SKMarkdownNode(); break;
+		case "Header": node = SKMarkdownHeader(); break;
+		case "List": node = SKMarkdownNode(); break;
+		case "ListItem": node = SKMarkdownListItem(); break;
+		case "HorizontalRule": node = loadSKView( "/ui/mdborder.ui", SKMarkdownBorder); break;
+		//	追加するやつ！
+		case "Title": node = loadSKView( "/ui/mdtitle.ui", SKMarkdownTitle); break;
+		case "TitleLink": node = loadSKView( "/ui/mdlink.ui", SKMarkdownTitleLink); break;
+		}
+		node.setup( t);
+		if( t["children"]) node.buildChildren( t);
+		return node;
+	}
+
+	static function buildInlineText( tn, t){
+		switch( t.type){
+		case "Break":
+			tn .. "\n";
+			break;
+		case "Str":
+			tn .. t.value;
+			break;
+		case "Strong": case "Emphasis":
+			tn .. (t.type=="Strong"?"[b]":"[i]");
+			foreach( c in t.children) buildInlineText( tn, c);
+			tn .. "[n]";
+			break;
+		case "Link":
+			foreach( c in t.children) buildInlineText( tn, c);
+			break;
+		}
+	}
+}
+
+//	
+//	
+class SKMarkdownText extends SKMarkdownNode
+{
+	textbox = null;					//	TextBox 描画用
+
+	function setTextBox( tb){
+		textbox = tb;
+	}
+
+	//	childなし
+	function setWidth( w){
+		textbox.setRect( 0, 0, w, 1024);
+		local tbnd = textbox.bnd;
+		bnd.set( 0, 0, w, tbnd.h);
+	}
+
+	function render(){
+		skDrawTextBox( textbox);
+	}
+}
+
+class SKMarkdownDocument extends SKMarkdownNode
+{
+	//	ルートのSKMarkdownNodeのみ呼び出される
+	function setStretchRect( x, y, w, h){
+		if( bnd.w != w){
+			setWidth( w);
+			revalidate();
+		}
+	}
+
+}
+//	depthによってテキストサイズ、背景、マージン
+//	
+class SKMarkdownHeader extends SKMarkdownNode
+{
+}
+
+//	横線
+//	
+class SKMarkdownBorder extends SKMarkdownNode
+{
+	function loadFinished(){
+	}
+
+	function setWidth( w){
+		stretchSize( w, bnd.h, true);
+	}
+}
+
+//	リスト要素。1,2,3は親要素見ないといけないな
+//	
+class SKMarkdownListItem extends SKMarkdownNode
+{
+	indent = 24;
+	sp = null;
+
+	// function setup( t){
+	// 	ast = t;
+	// 	sp = ::getSprite( "/skstudio/img/ui/star.png");
+	// }
+
+	// function render(){
+	// 	skDrawSprite( sp);
+	// }
+}
+
+//	MarkdownHomeContentで追加するやつ。日付、タイトル名、リンクボタン。
+//	
+class SKMarkdownHeader extends SKMarkdownNode
+{
+	marginu = 4;
+	margind = 8;
+	
+	function makeFontAttribute(){
+		return FontAttribute( Fonts.get( "ui"), 18, 0xffffffff, SK_FONT_BOLD);
+	}
+}
+
+//	MarkdownHomeContentで追加するやつ。日付、タイトル名、リンクボタン。
+//	
+class SKMarkdownTitle extends SKMarkdownNode
+{
+	function setup( t){
+		ast = t;
+	}
+
+	function setWidth( w){
+		stretchSize( w, bnd.h, true);
+	}
+}
+
+//	MarkdownHomeContentで追加するやつ。日付、タイトル名、リンクボタン。
+//	
+class SKMarkdownTitleLink extends SKMarkdownNode
+{
+	function setup( t){
+		ast = t;
+	}
+
+	function setWidth( w){
+		stretchSize( w, bnd.h, true);
+	}
+}

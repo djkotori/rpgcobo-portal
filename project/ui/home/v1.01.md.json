@@ -1,0 +1,887 @@
+{
+	"result": "OK",
+	"ast": {
+		"type": "Document",
+		"children": [
+			{
+				"type": "Header",
+				"depth": 3,
+				"children": [
+					{
+						"type": "Str",
+						"value": "新機能：",
+						"loc": {
+							"start": {
+								"line": 1,
+								"column": 4
+							},
+							"end": {
+								"line": 1,
+								"column": 8
+							}
+						},
+						"range": [
+							4,
+							8
+						],
+						"raw": "新機能："
+					}
+				],
+				"loc": {
+					"start": {
+						"line": 1,
+						"column": 0
+					},
+					"end": {
+						"line": 1,
+						"column": 8
+					}
+				},
+				"range": [
+					0,
+					8
+				],
+				"raw": "### 新機能："
+			},
+			{
+				"type": "Paragraph",
+				"children": [
+					{
+						"type": "Str",
+						"value": "改行1",
+						"loc": {
+							"start": {
+								"line": 2,
+								"column": 0
+							},
+							"end": {
+								"line": 2,
+								"column": 3
+							}
+						},
+						"range": [
+							9,
+							12
+						],
+						"raw": "改行1"
+					},
+					{
+						"type": "Break",
+						"loc": {
+							"start": {
+								"line": 2,
+								"column": 3
+							},
+							"end": {
+								"line": 3,
+								"column": 0
+							}
+						},
+						"range": [
+							12,
+							15
+						],
+						"raw": "  \n"
+					},
+					{
+						"type": "Str",
+						"value": "改行2",
+						"loc": {
+							"start": {
+								"line": 3,
+								"column": 0
+							},
+							"end": {
+								"line": 3,
+								"column": 3
+							}
+						},
+						"range": [
+							15,
+							18
+						],
+						"raw": "改行2"
+					}
+				],
+				"loc": {
+					"start": {
+						"line": 2,
+						"column": 0
+					},
+					"end": {
+						"line": 3,
+						"column": 3
+					}
+				},
+				"range": [
+					9,
+					18
+				],
+				"raw": "改行1  \n改行2"
+			},
+			{
+				"type": "Paragraph",
+				"children": [
+					{
+						"type": "Str",
+						"value": "どうかな",
+						"loc": {
+							"start": {
+								"line": 5,
+								"column": 0
+							},
+							"end": {
+								"line": 5,
+								"column": 4
+							}
+						},
+						"range": [
+							20,
+							24
+						],
+						"raw": "どうかな"
+					}
+				],
+				"loc": {
+					"start": {
+						"line": 5,
+						"column": 0
+					},
+					"end": {
+						"line": 5,
+						"column": 4
+					}
+				},
+				"range": [
+					20,
+					24
+				],
+				"raw": "どうかな"
+			},
+			{
+				"type": "Header",
+				"depth": 4,
+				"children": [
+					{
+						"type": "Str",
+						"value": "ゲームランタイム",
+						"loc": {
+							"start": {
+								"line": 7,
+								"column": 5
+							},
+							"end": {
+								"line": 7,
+								"column": 13
+							}
+						},
+						"range": [
+							31,
+							39
+						],
+						"raw": "ゲームランタイム"
+					}
+				],
+				"loc": {
+					"start": {
+						"line": 7,
+						"column": 0
+					},
+					"end": {
+						"line": 7,
+						"column": 13
+					}
+				},
+				"range": [
+					26,
+					39
+				],
+				"raw": "#### ゲームランタイム"
+			},
+			{
+				"type": "List",
+				"ordered": false,
+				"start": null,
+				"spread": false,
+				"children": [
+					{
+						"type": "ListItem",
+						"spread": false,
+						"checked": null,
+						"children": [
+							{
+								"type": "Paragraph",
+								"children": [
+									{
+										"type": "Str",
+										"value": "ゲームエンジン実行時、",
+										"loc": {
+											"start": {
+												"line": 9,
+												"column": 2
+											},
+											"end": {
+												"line": 9,
+												"column": 13
+											}
+										},
+										"range": [
+											43,
+											54
+										],
+										"raw": "ゲームエンジン実行時、"
+									},
+									{
+										"type": "Strong",
+										"children": [
+											{
+												"type": "Str",
+												"value": "不要になったマップのコリジョン",
+												"loc": {
+													"start": {
+														"line": 9,
+														"column": 15
+													},
+													"end": {
+														"line": 9,
+														"column": 30
+													}
+												},
+												"range": [
+													56,
+													71
+												],
+												"raw": "不要になったマップのコリジョン"
+											}
+										],
+										"loc": {
+											"start": {
+												"line": 9,
+												"column": 13
+											},
+											"end": {
+												"line": 9,
+												"column": 32
+											}
+										},
+										"range": [
+											54,
+											73
+										],
+										"raw": "**不要になったマップのコリジョン**"
+									},
+									{
+										"type": "Str",
+										"value": "のメモリ利用効率を改善しました。",
+										"loc": {
+											"start": {
+												"line": 9,
+												"column": 32
+											},
+											"end": {
+												"line": 9,
+												"column": 48
+											}
+										},
+										"range": [
+											73,
+											89
+										],
+										"raw": "のメモリ利用効率を改善しました。"
+									}
+								],
+								"loc": {
+									"start": {
+										"line": 9,
+										"column": 2
+									},
+									"end": {
+										"line": 9,
+										"column": 48
+									}
+								},
+								"range": [
+									43,
+									89
+								],
+								"raw": "ゲームエンジン実行時、**不要になったマップのコリジョン**のメモリ利用効率を改善しました。"
+							},
+							{
+								"type": "List",
+								"ordered": true,
+								"start": 1,
+								"spread": false,
+								"children": [
+									{
+										"type": "ListItem",
+										"spread": false,
+										"checked": null,
+										"children": [
+											{
+												"type": "Paragraph",
+												"children": [
+													{
+														"type": "Str",
+														"value": "子リスト1",
+														"loc": {
+															"start": {
+																"line": 10,
+																"column": 5
+															},
+															"end": {
+																"line": 10,
+																"column": 10
+															}
+														},
+														"range": [
+															95,
+															100
+														],
+														"raw": "子リスト1"
+													}
+												],
+												"loc": {
+													"start": {
+														"line": 10,
+														"column": 5
+													},
+													"end": {
+														"line": 10,
+														"column": 10
+													}
+												},
+												"range": [
+													95,
+													100
+												],
+												"raw": "子リスト1"
+											}
+										],
+										"loc": {
+											"start": {
+												"line": 10,
+												"column": 2
+											},
+											"end": {
+												"line": 10,
+												"column": 10
+											}
+										},
+										"range": [
+											92,
+											100
+										],
+										"raw": "1. 子リスト1"
+									},
+									{
+										"type": "ListItem",
+										"spread": false,
+										"checked": null,
+										"children": [
+											{
+												"type": "Paragraph",
+												"children": [
+													{
+														"type": "Str",
+														"value": "子リスト2",
+														"loc": {
+															"start": {
+																"line": 11,
+																"column": 5
+															},
+															"end": {
+																"line": 11,
+																"column": 10
+															}
+														},
+														"range": [
+															106,
+															111
+														],
+														"raw": "子リスト2"
+													}
+												],
+												"loc": {
+													"start": {
+														"line": 11,
+														"column": 5
+													},
+													"end": {
+														"line": 11,
+														"column": 10
+													}
+												},
+												"range": [
+													106,
+													111
+												],
+												"raw": "子リスト2"
+											}
+										],
+										"loc": {
+											"start": {
+												"line": 11,
+												"column": 2
+											},
+											"end": {
+												"line": 11,
+												"column": 10
+											}
+										},
+										"range": [
+											103,
+											111
+										],
+										"raw": "3. 子リスト2"
+									}
+								],
+								"loc": {
+									"start": {
+										"line": 10,
+										"column": 2
+									},
+									"end": {
+										"line": 11,
+										"column": 10
+									}
+								},
+								"range": [
+									92,
+									111
+								],
+								"raw": "1. 子リスト1\n  3. 子リスト2"
+							}
+						],
+						"loc": {
+							"start": {
+								"line": 9,
+								"column": 0
+							},
+							"end": {
+								"line": 11,
+								"column": 10
+							}
+						},
+						"range": [
+							41,
+							111
+						],
+						"raw": "- ゲームエンジン実行時、**不要になったマップのコリジョン**のメモリ利用効率を改善しました。\n  1. 子リスト1\n  3. 子リスト2"
+					},
+					{
+						"type": "ListItem",
+						"spread": false,
+						"checked": null,
+						"children": [
+							{
+								"type": "Paragraph",
+								"children": [
+									{
+										"type": "Str",
+										"value": "ミニマップの表示に対応しました。",
+										"loc": {
+											"start": {
+												"line": 12,
+												"column": 2
+											},
+											"end": {
+												"line": 12,
+												"column": 18
+											}
+										},
+										"range": [
+											114,
+											130
+										],
+										"raw": "ミニマップの表示に対応しました。"
+									}
+								],
+								"loc": {
+									"start": {
+										"line": 12,
+										"column": 2
+									},
+									"end": {
+										"line": 12,
+										"column": 18
+									}
+								},
+								"range": [
+									114,
+									130
+								],
+								"raw": "ミニマップの表示に対応しました。"
+							}
+						],
+						"loc": {
+							"start": {
+								"line": 12,
+								"column": 0
+							},
+							"end": {
+								"line": 12,
+								"column": 18
+							}
+						},
+						"range": [
+							112,
+							130
+						],
+						"raw": "- ミニマップの表示に対応しました。"
+					}
+				],
+				"loc": {
+					"start": {
+						"line": 9,
+						"column": 0
+					},
+					"end": {
+						"line": 12,
+						"column": 18
+					}
+				},
+				"range": [
+					41,
+					130
+				],
+				"raw": "- ゲームエンジン実行時、**不要になったマップのコリジョン**のメモリ利用効率を改善しました。\n  1. 子リスト1\n  3. 子リスト2\n- ミニマップの表示に対応しました。"
+			},
+			{
+				"type": "Header",
+				"depth": 3,
+				"children": [
+					{
+						"type": "Str",
+						"value": "バグ修正：",
+						"loc": {
+							"start": {
+								"line": 15,
+								"column": 4
+							},
+							"end": {
+								"line": 15,
+								"column": 9
+							}
+						},
+						"range": [
+							137,
+							142
+						],
+						"raw": "バグ修正："
+					}
+				],
+				"loc": {
+					"start": {
+						"line": 15,
+						"column": 0
+					},
+					"end": {
+						"line": 15,
+						"column": 9
+					}
+				},
+				"range": [
+					133,
+					142
+				],
+				"raw": "### バグ修正："
+			},
+			{
+				"type": "Header",
+				"depth": 4,
+				"children": [
+					{
+						"type": "Str",
+						"value": "スプライトツール",
+						"loc": {
+							"start": {
+								"line": 17,
+								"column": 5
+							},
+							"end": {
+								"line": 17,
+								"column": 13
+							}
+						},
+						"range": [
+							149,
+							157
+						],
+						"raw": "スプライトツール"
+					}
+				],
+				"loc": {
+					"start": {
+						"line": 17,
+						"column": 0
+					},
+					"end": {
+						"line": 17,
+						"column": 13
+					}
+				},
+				"range": [
+					144,
+					157
+				],
+				"raw": "#### スプライトツール"
+			},
+			{
+				"type": "List",
+				"ordered": false,
+				"start": null,
+				"spread": false,
+				"children": [
+					{
+						"type": "ListItem",
+						"spread": false,
+						"checked": null,
+						"children": [
+							{
+								"type": "Paragraph",
+								"children": [
+									{
+										"type": "Str",
+										"value": "あるレイヤーのあるフレームを全選択している状態で、位置の補間方法をクリックすると例外が発生する不具合を修正しました。",
+										"loc": {
+											"start": {
+												"line": 19,
+												"column": 2
+											},
+											"end": {
+												"line": 19,
+												"column": 60
+											}
+										},
+										"range": [
+											161,
+											219
+										],
+										"raw": "あるレイヤーのあるフレームを全選択している状態で、位置の補間方法をクリックすると例外が発生する不具合を修正しました。"
+									}
+								],
+								"loc": {
+									"start": {
+										"line": 19,
+										"column": 2
+									},
+									"end": {
+										"line": 19,
+										"column": 60
+									}
+								},
+								"range": [
+									161,
+									219
+								],
+								"raw": "あるレイヤーのあるフレームを全選択している状態で、位置の補間方法をクリックすると例外が発生する不具合を修正しました。"
+							}
+						],
+						"loc": {
+							"start": {
+								"line": 19,
+								"column": 0
+							},
+							"end": {
+								"line": 19,
+								"column": 60
+							}
+						},
+						"range": [
+							159,
+							219
+						],
+						"raw": "- あるレイヤーのあるフレームを全選択している状態で、位置の補間方法をクリックすると例外が発生する不具合を修正しました。"
+					}
+				],
+				"loc": {
+					"start": {
+						"line": 19,
+						"column": 0
+					},
+					"end": {
+						"line": 19,
+						"column": 60
+					}
+				},
+				"range": [
+					159,
+					219
+				],
+				"raw": "- あるレイヤーのあるフレームを全選択している状態で、位置の補間方法をクリックすると例外が発生する不具合を修正しました。"
+			},
+			{
+				"type": "HorizontalRule",
+				"loc": {
+					"start": {
+						"line": 21,
+						"column": 0
+					},
+					"end": {
+						"line": 21,
+						"column": 3
+					}
+				},
+				"range": [
+					221,
+					224
+				],
+				"raw": "---"
+			},
+			{
+				"type": "Paragraph",
+				"children": [
+					{
+						"type": "Emphasis",
+						"children": [
+							{
+								"type": "Strong",
+								"children": [
+									{
+										"type": "Str",
+										"value": "その他、実に多くの細かな機能改善、バグ修正を行いました。",
+										"loc": {
+											"start": {
+												"line": 22,
+												"column": 3
+											},
+											"end": {
+												"line": 22,
+												"column": 31
+											}
+										},
+										"range": [
+											228,
+											256
+										],
+										"raw": "その他、実に多くの細かな機能改善、バグ修正を行いました。"
+									},
+									{
+										"type": "Link",
+										"title": null,
+										"url": "/index.html",
+										"children": [
+											{
+												"type": "Str",
+												"value": "こちらをクリック",
+												"loc": {
+													"start": {
+														"line": 22,
+														"column": 32
+													},
+													"end": {
+														"line": 22,
+														"column": 40
+													}
+												},
+												"range": [
+													257,
+													265
+												],
+												"raw": "こちらをクリック"
+											}
+										],
+										"loc": {
+											"start": {
+												"line": 22,
+												"column": 31
+											},
+											"end": {
+												"line": 22,
+												"column": 54
+											}
+										},
+										"range": [
+											256,
+											279
+										],
+										"raw": "[こちらをクリック](/index.html)"
+									},
+									{
+										"type": "Str",
+										"value": "しましょう！",
+										"loc": {
+											"start": {
+												"line": 22,
+												"column": 54
+											},
+											"end": {
+												"line": 22,
+												"column": 60
+											}
+										},
+										"range": [
+											279,
+											285
+										],
+										"raw": "しましょう！"
+									}
+								],
+								"loc": {
+									"start": {
+										"line": 22,
+										"column": 1
+									},
+									"end": {
+										"line": 22,
+										"column": 62
+									}
+								},
+								"range": [
+									226,
+									287
+								],
+								"raw": "**その他、実に多くの細かな機能改善、バグ修正を行いました。[こちらをクリック](/index.html)しましょう！**"
+							}
+						],
+						"loc": {
+							"start": {
+								"line": 22,
+								"column": 0
+							},
+							"end": {
+								"line": 22,
+								"column": 63
+							}
+						},
+						"range": [
+							225,
+							288
+						],
+						"raw": "***その他、実に多くの細かな機能改善、バグ修正を行いました。[こちらをクリック](/index.html)しましょう！***"
+					}
+				],
+				"loc": {
+					"start": {
+						"line": 22,
+						"column": 0
+					},
+					"end": {
+						"line": 22,
+						"column": 63
+					}
+				},
+				"range": [
+					225,
+					288
+				],
+				"raw": "***その他、実に多くの細かな機能改善、バグ修正を行いました。[こちらをクリック](/index.html)しましょう！***"
+			}
+		],
+		"loc": {
+			"start": {
+				"line": 1,
+				"column": 0
+			},
+			"end": {
+				"line": 25,
+				"column": 0
+			}
+		},
+		"range": [
+			0,
+			291
+		],
+		"raw": "### 新機能：\n改行1  \n改行2\n\nどうかな\n\n#### ゲームランタイム\n\n- ゲームエンジン実行時、**不要になったマップのコリジョン**のメモリ利用効率を改善しました。\n  1. 子リスト1\n  3. 子リスト2\n- ミニマップの表示に対応しました。\n\n\n### バグ修正：\n\n#### スプライトツール\n\n- あるレイヤーのあるフレームを全選択している状態で、位置の補間方法をクリックすると例外が発生する不具合を修正しました。\n\n---\n***その他、実に多くの細かな機能改善、バグ修正を行いました。[こちらをクリック](/index.html)しましょう！***\n\n\n"
+	}
+}

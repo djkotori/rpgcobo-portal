@@ -1,0 +1,703 @@
+
+import VirtualKeyCode;
+import ModifiersMask;
+import FileDialogMode;
+import PropertyType;
+
+//	プロジェクトメニュー。
+//	
+class RPGPortalProjectView extends SKLibView
+{
+	searchedit = null;
+	projlist = null;
+
+	projitems = null;			//	searcheditによってフィルターされたプロジェクトリスト
+	
+	static function getProjectIcon( proj){
+		local cache = #{};
+		if( cache[proj.projpath]) return cache[proj.projpath];
+		local f = FileRef( proj.projpath.."/project/resource/icon/appicon.png");
+		local img;
+		try{
+			img = skLoadImage( f.load());
+			img.premultAlpha();
+		}catch( ex){
+			printf( "Error loading project icon image : %S\n", f.path);
+			// printexception( ex);
+			img = ::getResourceContent( "/img/portal/erricon.png");
+		}
+		return cache[proj.projpath] <- img;
+	}
+	
+	function loadFinished(){
+		searchedit = findChild( "searchedit");
+		projitems = [];
+		projlist = ListBehavior( findChild( "projlist"), projitems);
+		projlist.setviewfunc = @( la, v, i){	//	i:proj
+			local licon = ::sakana.languagelist.find( @( a) a.code==i.projlang).icon;
+			v.setValue( "projname", "%S %S" % (licon, i.projname));
+			v.setValue( "projpath", i.status>0 ? i.projpath : rtf( "[#f00]"..i.projpath));
+			v.setValue( "gittag", i.gittag);
+			local d = Date( long( i.updated));
+			local dstr = sprintf( "%04d/%02d/%02d %02d:%02d", d.tm_year+1900, d.tm_mon+1, d.tm_mday, d.tm_hour, d.tm_min);
+			v.setValue( "updated", dstr);
+			v.findChild( "favobtn").setSelected( !!i["favo"]);
+			local projicon = RPGPortalProjectView.getProjectIcon( i);
+			v.setValue( "projicon", projicon);
+			v.pickable = false;
+		}
+		// projlist.dndfunc = 3;	//	???
+		projlist.listview.addEventListener( ACTION_EVENT, projevent);
+		projlist.listview.addEventListener( ITEM_EVENT, projevent);
+		projlist.listview.addEventListener( KEY_EVENT, projevent);
+		addEventListener( ACTION_EVENT, actionevent);
+		updateList();
+	}
+
+	function updateList(){
+		local a = ::workspace["projlist"];
+		local noprojg = findChild( "noprojg"), listg = findChild( "listg");
+		if( !length( a)){
+			noprojg.setVisible( true); listg.setVisible( false);
+		}else{
+			noprojg.setVisible( false); listg.setVisible( true);
+			foreach( i, v in a){
+				//	状態をチェック
+				local projdir = FileRef( v.projpath);
+				local v1 = { ...v, ...ProjectOp.getProjectInfo( projdir)};
+				if( v1){
+					if( v1 <> v) Table.clear( v) ... v1;	//	入れ替え
+				}else{
+					v.status = 0;	//	プロジェクト消失。。。
+				}
+			}
+			filterList();
+			sortList();
+		}
+	}
+
+	function filterList(){
+		local f = searchedit.getText().trim().toLowerCase();
+		if( length( f)){
+			projitems.clear() ... (::workspace["projlist"].filter( @( v){
+				foreach( vv in v){
+					if( typeof( vv) == SS_STRING && vv.toLowerCase().contains( f)) return true;
+				}
+				return false;
+			}));
+		}else{
+			projitems.clear() ... ::workspace["projlist"];
+		}
+	}
+	
+	function sortList(){
+		local sortfavo = @( a, b) !!a["favo"] <> !!b["favo"];
+		local sortname = @( a, b) a.projname <> b.projname;
+		local sortdate = @( a, b) int( b.updated) <> int( a.updated);
+		local sorttag = @( a, b){
+			local av = TagVersion( a["gittag"]);
+			local bv = TagVersion( b["gittag"]);
+			return int( bv.score) <> int( av.score);
+		}
+		local sorts;
+		switch( ::workspace["projsort"]){
+		case "date":	sorts = [sortdate, sortname, sorttag]; break;
+		case "tag":		sorts = [sorttag, sortname, sortdate]; break;
+		default: 		sorts = [sortname, sortdate, sorttag]; break;
+		}
+		if( ::workspace["favofirst"]) sorts[0] <- sortfavo;
+		projitems.sort( @( a, b){
+			local c; foreach( fn in sorts) if( c=fn( a, b)) return c;
+			return 0;
+		});
+		projlist.refreshItems();
+		projlist.deselectAll();
+	}
+
+	function projevent( e){
+		local cmd = e.actioncmd;
+		switch( e.id){
+		case ACTION_PERFORMED:
+			if( cmd["src"]){	//	favo
+				if( cmd.src["name"] == "favobtn"){
+					cmd.item.favo <- cmd.src.isSelected();
+				}
+				break;
+			}
+			if( e.isMouseDown( BUTTON2_MASK)){
+				if( cmd){
+					projlist.setSelectedItem( cmd);
+					showProjectContextMenu( cmd);
+				}else{
+					showContextMenu( null);
+				}
+			}
+			if( e.isMouseDown( BUTTON1_MASK)){
+				openProject( cmd);
+			}
+			break;
+		}
+	}
+
+	function actionevent( e){
+		switch( e.src["name"]){
+		case "searchedit":
+			break;
+		case "newprojbtn":
+			createNewProject();
+			break;
+		case "gmenubtn":
+			showContextMenu( e);
+			break;
+		case "sortbtn":
+			showSortContextMenu( e);
+			break;
+		}
+	}
+
+	function createNewProject(){
+		if( !::rpgportal.bgtask.waitForTasks( ["git","tool","assets"])) return;	//	cancel
+		local proj = NewProjectDialog.run();
+		if( proj){
+			workspace.projlist[0] <- proj;
+			::saveWorkspace();
+			updateList();
+			Popups.showInfo( "$T.pop_projectcreated");
+		}
+	}
+
+	//	
+	function openProject( proj){
+		// local exe = FileRef( "%S/rpgcobo.exe" % proj.projpath);
+		// local p = popen_s();
+		// local ret = p.open( exe, []);
+		// p.close();
+		local prm = {
+			name = "RPG-Cobo"
+			exe = FileRef( "tools/project_open.ps1")
+			args = [FileRef( proj.projpath).nativepath]
+		};
+		Dialogs.launchTool( prm);
+	}
+
+	//	
+	function showContextMenu( e){
+		local ctxmenu = [
+			{ id="new", lbl="$T.lbl_newproj", icon="\ue147"},
+			"-",
+			{ id="importdir", lbl="$T.lbl_importdir", icon="\ue2c8"},
+			{ id="importzip", lbl="$T.lbl_importzip", icon="\ueb2c"},
+			{ id="scan", lbl="$T.lbl_scan", icon="\ue51e"},
+		];
+		switch( MenuPopup.run( ctxmenu, e["src"])["id"]){
+		case "new":
+			createNewProject();
+			break;
+		case "importdir":
+		{
+			local d = FileDialog();
+			local docdir = ::workspace["projbasepath"] || skGetDocumentDir();
+			// d.setTitle( lang( T.dlg_dir_select));
+			d.setTitle( T.lbl_selectimportdir);
+			d.setMode( FILEDIALOG_SELECTDIR);
+			local dir = FileRef( docdir);
+			d.setFile( dir);
+			d.show();
+			while( d.isShown()) suspend();
+			local p = d.getResult();
+			if( p){
+				local projdir = FileRef( p);
+				if( ::workspace.projlist.find( @( v) v.projpath==p)){
+					Popups.showInfo( "$T.pop_alreadyimported");
+					break;
+				}
+				local pi = ProjectOp.getProjectInfo( projdir);
+				if( pi){
+					if( Dialogs.confirm( {msg=rtf( tmpl( T.tmpl_confirm_import, {v=pi.projname, path=p, ver=pi.gittag}))} )){
+						::workspace.projlist .. pi;
+						::saveWorkspace();
+						updateList();
+						Popups.showInfo( "$T.pop_projectimported");
+					}
+				}else{
+					Popups.showInfo( "$T.pop_projectnotfound");
+				}
+			}
+			break;
+		}
+		}
+	}
+
+	//	プロジェクトが使用中の場合には念のためにバックアップ他色々な機能は動かないようにする！
+	//	といっても、rpgcobo.exeが立ち上がっているかだけの判断。完全なガードはしていない。
+	function cancelIfProjectOpen( proj){
+		local r = ProjectOp.isProjectOpen( proj);
+		if( r){
+			Popups.showInfo( "$T.lbl_closeproj_first");
+			return true;
+		}
+	}
+
+	//	
+	function showProjectContextMenu( proj){
+		local newtag = ::workspace.tooltags[0]["tag"]||null, basetag = proj["gittag"]||null;
+		local vup = newtag==basetag ? null : newtag;
+		local projdir = FileRef( proj.projpath);
+		local backupmenu = @(){
+			local fullbk = ProjectOp.getFullBackupFile( projdir);
+			return [
+				{ id="backup", lbl="$T.lbl_backupproj", icon="\ue623", xopen=1},
+				"-",
+				{ id="restore", lbl="$T.lbl_restoreproj", icon="\ue929", xopen=1},
+				{ id="downgrade", lbl="$T.lbl_downgrade", icon="\ue8d7", disable=!fullbk.exists(), xopen=1},
+			];
+		};
+		local ctxmenu = [
+			{ id="open", lbl="$T.lbl_open", icon="\ue2c8"},
+			{ id="opendir", lbl="$T.filetabs_ctxmenu_explor", icon="\ue89e"},
+			"-",
+			{ id="rename", lbl="$T.lbl_rename", icon="\ue3c9", xopen=1},
+			{ id="duplicate", lbl="$T.lbl_dupproj", icon="\uebbd", xopen=1},
+			{ lbl="$T.lbl_backupop", icon="\ue623", submenu=backupmenu},
+			"-",
+			{ id="remove", lbl="$T.lbl_listremove", icon="\ue872"},
+			//	gittabの無いプロジェクト(gitから直接pullしたやつとか)はメニュー非表示
+			...(proj.gittag && [
+				"-",
+				{ id="upgrade", lbl=(vup?tmpl( T.tmpl_verup_tool, {v=vup}):"$T.lbl_latestver"), icon=vup?"\ue863":"\ue5ca", disable=!vup, xopen=1},
+			]),
+		];
+		local m = MenuPopup.run( ctxmenu);
+		if( m["xopen"] && cancelIfProjectOpen( proj)) return;
+		//
+		switch( m["id"]){
+		case "open":
+			openProject( proj);
+			break;
+		case "opendir":
+			skOpenURL( "dir://" .. proj.projpath);
+			break;
+		case "duplicate":
+			showDuplicateProject( proj);
+			break;
+		case "backup":
+			showBackupMenu( proj);
+			break;
+		case "restore":
+			showRestoreMenu( proj);
+			break;
+		case "rename":
+			local iv = projlist.getItemView( proj);
+			local lbl = iv.findChild( "projname");
+			local n = Popups.showRename( lbl);
+			if( n && n <> proj.projname){
+				ProjectOp.renameProject( projdir, n);
+				proj.projname = n;
+				projlist.refreshItems();
+			}
+			break;
+		case "remove":
+			if( Dialogs.confirm( {msg="$T.confirm_remproj"})){
+				workspace.projlist.removeValue( proj);
+				::saveWorkspace();
+				updateList();
+			}
+			break;
+		case "upgrade":
+			showUpgradeProject( proj, basetag, newtag);
+			break;
+		case "downgrade":
+			showDowngradeProject( proj);
+			break;
+		}
+	}
+
+	//	projをnewtagにバージョンアップする
+	function showUpgradeProject( proj, basetag, newtag){
+		local chk = Dialogs.confirm( {
+			msg=tmpl( T.tmpl_tool_upgrade, {v0=basetag,v1=newtag}), check="$T.lbl_run_fullbackup", checksel=true, 
+			icon="\ue863",
+		});
+		if( chk){	//	2の場合はfull backup
+			::rpgportal.bgtask.addTask({
+				id="basetag", func=@(){ ProjectOp.cloneTagCache( basetag); }
+			});
+			::rpgportal.bgtask.addTask({
+				id="newtag", func=@(){ ProjectOp.cloneTagCache( newtag); }
+			});
+			if( !::rpgportal.bgtask.waitForTasks( ["basetag","newtag"])) return;	//	cancel
+			local projdir = FileRef( proj.projpath);
+			local diffptr = ptr();
+			newthread().start( @(){ 
+				diffptr << ProjectOp.createMergeResult( projdir, basetag, newtag);
+			}, this);
+			Dialogs.showWaiting( "$T.lbl_diff_verup", @() !~diffptr );	//	取得待ちダイアログ
+			local mergemap = ~diffptr;
+			local ct = {};
+			foreach( i, v in mergemap) if( v.type=="C") ct[i] <- v;
+			printf( "MERGE TABLE!!!!!!!!!!!!!! %S\n CONFLICT????????????? %S\n", encodeJSON( mergemap, 5), encodeJSON( ct, 5));
+			if( length( ct)){
+				if( !ConflictCheckDialog.run( ct)) return;
+			}else{
+			}
+			local a;
+			while( a = ProjectOp.checkMergeFileLocked( projdir, mergemap)){
+				if( !Dialogs.confirm( {msg="$T.confirm_filelocked", icon="\ue8b2" yestxt="$T.lbl_retry"})){
+					return;
+				}
+			}
+			//	ここで初めてフルバックアップ！
+			if( chk == 2){
+				local ret = Dialogs.progress( "$T.lbl_runbackup", ProjectOp.saveProjectFullBackup( projdir));
+				suspend();
+			}
+			//	バージョンアップ
+			// Table.filter( @( v, i) v.type=="C");	Table.map( @( v, i) {i=i,v=v});
+			local mergeptr = ptr();
+			newthread().start( @(){ 
+				mergeptr << ProjectOp.applyMergeResult( projdir, newtag, mergemap);
+			}, this);
+			Dialogs.showWaiting( "$T.lbl_upgrade_inprogress", @() ~mergeptr==null );	//	取得待ちダイアログ
+			//	rpgcobo.verを付けなおす
+			local gi = { repo=ProjectOp.env.repo_tool, tag=newtag };
+			local bb = encodeJSON( gi, 0, ByteBuffer()); bb.pos = 0;
+			local vf = FileRef( projdir, "rpgcobo.ver");
+			vf.save( bb);
+			//	OK!!!!!!
+			proj.gittag = newtag;
+			projlist.refreshItems();
+			suspend();
+			Popups.showInfo( "$T.pop_tool_verup_done");
+		}
+	}
+
+	//	projを複製する。
+	//	名前、パスを指定
+	function showDuplicateProject( proj){
+		local dname = proj.projname, dpath = proj.projpath, i = 1;
+		for( ;;i ++){
+			dpath = `$proj.projpath-$i`;
+			local f = FileRef( dpath);
+			if( !f.exists() || (f.isDirectory() && !length( f.getList()))){
+				dname = `$proj.projname-$i`;
+				break;
+			}
+		}
+		local langlist = ::sakana.languagelist.map( @(v) ({ lbl=v.name, val=v.code, icon=v.icon, }));
+		local propdef = {
+			name = "$T.lbl_dupproj", icon = "\uebbd",
+			width = 520,
+			props = [
+				{ pid="projname", lbl="$T.lbl_projname", type=STRING, cnt="cnt.ui", },
+				{ pid="projlang", lbl="$T.lbl_projlang", type=LIST, list=langlist, cnt="cnt.ui", },
+				{ pid="projpath", lbl="$T.lbl_projpath", type=FILEPATH, cnt="cnt3.ui", },
+			],
+		}
+		local dst = PropertyEditPopup_OK.run( null, propdef, { projname=dname, projpath=dpath, projlang=proj.projlang});
+		if( dst){
+			local f = FileRef( dst.projpath);
+			if( f.exists() && (!f.isDirectory() || length( f.getList())>0)){
+				Popups.showInfo( "$T.pop_dirnotempty");
+			}
+			local newprojptr = ptr();
+			local thread = newthread(); thread.start( @() newprojptr << ProjectOp.copyProject( proj, dst), this);
+			if( Dialogs.showWaiting( "$T.lbl_dupproj_run", @() thread.getState()==2)){
+				local newproj = ~newprojptr;
+				if( newproj){
+					::workspace.projlist .. newproj;
+					::saveWorkspace();
+					updateList();
+					Popups.showInfo( "$T.pop_projectcreated");
+				}
+			}
+		}
+	}
+
+	function backupfilename(){
+		local d = Date( Date.currentTime() - Date.timezone());
+		local dstr = sprintf( "%02d%02d%02d-%02d%02d", d.tm_year%100, d.tm_mon+1, d.tm_mday, d.tm_hour, d.tm_min);
+		return "backup-%S.zip" % dstr;
+	}
+
+	//	プロジェクトをバックアップ。
+	//	data, resource, plugin( rpgtoolsを除く )がバックアップされる。
+	function showBackupMenu( proj){
+		local projdir = FileRef( proj.projpath);
+		local dir = FileRef( projdir, "backup");
+		local fn = backupfilename();
+		local f = FileRef( dir, fn);
+		if( Dialogs.confirm( {msg=tmpl( T.tmpl_savebackup, {v=f.path}), icon="\uf057"})){
+			suspend();
+			dir.mkdirs();
+			local ret = Dialogs.progress( "$T.lbl_runbackup", ProjectOp.saveProjectBackup( proj, f));
+			if( ret instanceof Exception){
+				Popups.showInfo( "$T.lbl_error_backup");
+				FileRef( dir, fn).deleteFile();
+			}else
+			if( ret){	//	キャンセルされる場合もあり
+				Popups.showInfo( "$T.lbl_backup_done");
+			}else{
+				FileRef( dir, fn).deleteFile();
+			}
+		}
+	}
+
+	//	バックアップが無かったらshowInfo
+	function showRestoreMenu( proj){
+		local projdir = FileRef( proj.projpath);
+		local verf = FileRef( projdir, "rpgcobo.ver"), ver = verf.exists()? decodeJSON( verf.load()) : null;
+		local backups = (FileRef( projdir, "backup").getList( "*.zip")||[]).map( @( f){
+			local zip = ZipReader( f);
+			local be = zip.readFileEntry( ".backupinfo");
+			zip.close();
+			if( !be) return undefined;
+			local bi = decodeJSON( be.data);
+			local d = Date( long( bi.time) - Date.timezone());
+			local dstr = sprintf( "%04d/%02d/%02d/ %02d:%02d", d.tm_year+1900, d.tm_mon+1, d.tm_mday, d.tm_hour, d.tm_min);
+			return { ...bi, file = f, datestr = dstr, sizestr = sizestr( f.size), name = bi["auto"] ? "$T.lbl_backup_auto":"$T.lbl_backup_manual"}
+		});
+		backups.sort( @( v) v.datestr).reverse();
+		// printf( "list = %S\n", encodeJSON( backups));
+		//	クラス定義するほどじゃないのでここで全部処理書いちゃう！
+		local dlg = Dialog( "/skstudio/ui/dialog/backuplist.ui"), view = dlg.view;
+		local list = ListBehavior( view.findChild( "LIST"));
+		list.setviewfunc = @( la, v, i){
+			v.setValue( "name", i.name);
+			v.setValue( "date", i.datestr);
+			v.setValue( "size", i.sizestr);
+			v.setValue( "ver", i["tag"] || "");
+			v.pickable = false;
+		}
+		list.setListItems( backups);
+		list.listview.addEventListener( ACTION_EVENT, @( e){
+			if( e.id == ACTION_PERFORMED){
+				local sel = e.actioncmd;
+				if( Dialogs.confirm( {msg=tmpl( T.tmpl_restorebackup, {name=sel.name,date=sel.datestr,size=sel.sizestr}), check="$T.lbl_run_restore", needcheck=true, })){
+					dlg.ret = sel;
+					dlg.close();
+				}
+			}
+		});
+		dlg.show();
+		local sel = dlg.ret;
+		if( !sel) return;
+		//	
+		local ret = Dialogs.progress( "$T.lbl_runrestore", ProjectOp.restoreProjectBackup( proj, sel.file));
+		if( ret){	//	キャンセルされる場合もあり、でもされたら壊れるな
+			Popups.showInfo( "$T.lbl_restore_done");
+		}
+	}
+
+	//	
+	function showDowngradeProject( proj){
+		local projdir = FileRef( proj.projpath);
+		local fullbk = ProjectOp.getFullBackupFile( projdir);
+		local bktag;
+		{	//	
+			local zip = ZipReader( fullbk);
+			local ze = zip.readFileEntry( "rpgcobo.ver");
+			local ver = decodeJSON( ze.data);
+			bktag = ver.tag;
+			zip.close();
+		}
+		if( !Dialogs.confirm( {msg=tmpl(T.tmpl_tool_downgrade, {v=bktag}), check="$T.lbl_run_restore", needcheck=true})){
+			return;
+		}
+		local ret = Dialogs.progress( "$T.lbl_runrestore", ProjectOp.restoreFullProjectBackup( proj, fullbk));
+		if( ret){	//	キャンセルされる場合もあり、でもされたら壊れるな
+			proj.gittag = bktag;
+			projlist.refreshItems();
+			fullbk.deleteFile();	//	レストアできたらフルバックアップは消しちゃっていい
+			suspend();
+			Popups.showInfo( "$T.lbl_restore_done");
+		}
+	}
+
+	//	
+	function showSortContextMenu( e){
+		local ctxmenu = [
+			{ id="favo", lbl="$T.sort_favofirst", icon=workspace["favofirst"] ? ("\ue838",0xA3D900ff) : ("\ue83a",0x66666666)},
+			"-",
+			{ id="name", lbl="$T.sort_name", icon="\ue892", checked=workspace["projsort"]=="name"},
+			{ id="updated", lbl="$T.sort_updated", icon="\ue192", checked=workspace["projsort"]=="updated"},
+			{ id="tag", lbl="$T.sort_tag", icon="\ue9ef", checked=workspace["projsort"]=="tag"},
+		];
+		local ret = MenuPopup.run( ctxmenu, e["src"]);
+		switch( ret["id"]){
+		case "favo":
+			workspace["favofirst"] <- !workspace["favofirst"];
+			sortList();
+			break;
+		case "name": case "updated": case "tag":
+			workspace["projsort"] <- ret.id;
+			sortList();
+			break;
+		}
+	}
+}
+
+class ConflictCheckDialog extends Dialog
+{
+	static function run( ct){
+		local dlg = this( "/ui/conflictdialog.ui", ct);
+		dlg.show();
+		return dlg.ret;
+	}
+
+	constructor( v, ct){
+		super( v);
+		local a = [];
+		foreach( i, v in ct){ a .. { lbl=i, }; }
+		a.sort( @( v) v.lbl);
+		//
+		local pathlist = ListBehavior( view.findChild( "pathlist"), a);
+	}
+
+	function actionevent( e){
+		switch( e.src["name"]){
+		case "btn_create":
+			ret = true;
+			close();
+			break;
+		}
+		super.actionevent( e);
+	}
+}
+
+class NewProjectDialog extends Dialog
+{
+	static pathchrmap = {
+		[' ']='-',['.']='-',
+		['"']='-',['<']='-',['>']='-',['|']='-',[':']='-',
+		['*']='-',['?']='-',['\\']='-',['/']='-',
+	};
+
+	nameedit = null;
+	langmenu = null;
+	pathedit = null;
+	tmplbtn = null;
+	tagmenu = null;
+
+	tmpllist = null;				//	テンプレート一覧
+	docdir = null;
+	pathlinked = true;				//	パスがプロジェクト名とリンクしてる。patheditに直接入力すると外れる
+
+	static function run(){
+		local dlg = this( "/ui/newprojdialog.ui");
+		dlg.show();
+		return dlg.ret;
+	}
+
+	function init( v){
+		super.init( v);
+		docdir = ::workspace["projbasepath"] || skGetDocumentDir();
+		nameedit = v.findChild( "nameedit");
+		nameedit.addEventListener( TEXT_EVENT, nameevent);
+		nameedit.setText( T["lbl_newrpg"]);
+		pathedit = v.findChild( "pathedit");
+		pathedit.addEventListener( TEXT_EVENT, pathevent);
+		updatePath();
+		//
+		local langlist = ::sakana.languagelist.map( @(v) ({ lbl=v.name, code=v.code, icon=v.icon, }));
+		langmenu = MenuBehavior( v.findChild( "langmenu"), langlist);
+		langmenu.selectItem( @( v) v.code==::lang.code);
+		local taglist = ::workspace.tooltags.map( @(v, i) ({ lbl=v.tag, icon="\ue937", val=v}));
+		tagmenu = MenuBehavior( v.findChild( "tagmenu"), taglist);
+		tmpllist = ProjectOp.getTemplateList( ::workspace.asseturls);
+		tmplbtn = v.findChild( "tmplbtn");
+		setTemplate( tmpllist[0]);
+	}
+
+	function nameToDir( s){
+		local ws = wstring( s);
+		local sb = StringBuffer();
+		foreach( v in ws) sb .. char( pathchrmap[v] || v);
+		return string( sb);
+	}
+
+	function updatePath(){
+		pathedit.setText( docdir .. "/" .. nameToDir( nameedit.getText()));
+	}
+
+	function setTemplate( t){
+		tmplbtn.setValue( "lbl", t.name);
+		tmplbtn.ref = t;
+		view.setValue( "tmpldesc", t.desc);
+		if( t["bannarimg"]){
+			local v = view.findChild( "tmplimg");
+			local tex = Texture(); tex.load( t.bannarimg);
+			local sp = Sprite( tex);
+			v.setSprite( sp);
+		}
+	}
+
+	function actionevent( e){
+		switch( e.src["name"]){
+		case "referbtn":
+			{
+				local d = FileDialog();
+				d.setTitle( lang( T.dlg_dir_select));
+				d.setMode( FILEDIALOG_SELECTDIR);
+				local dir = FileRef( docdir);
+				if( !dir.isDirectory()) dir = FileRef( dir, "..");
+				d.setFile( dir);
+				d.show();
+				while( d.isShown()) suspend();
+				local p = d.getResult();
+				if( p){
+					docdir = p; pathlinked = true; updatePath();
+				}
+			}
+			break;
+		case "btn_create":
+			doCreateProject();
+			break;
+		}
+		super.actionevent( e);
+	}
+
+	//	プロジェクトを作成
+	function doCreateProject(){
+		local t = {
+			projname = nameedit.getText(),
+			projpath = pathedit.getText(),
+			projlang = langmenu.selitem.code,
+			tmpl = tmplbtn.ref,
+			tag = tagmenu.selitem.val.tag,
+		};
+		//	エラーチェック。pathは有効か、フォルダは空か、tmplとtagは互換か、
+		
+		//	タスク化して待つ。
+		local tag = ::workspace.tooltags[0].tag;
+		if( !ProjectOp.hasTagCacheDir( tag)){
+			::rpgportal.bgtask.addTask({
+				id="tag", func=@(){ ProjectOp.cloneTagCache( tag); }
+			});
+			if( !::rpgportal.bgtask.waitForTasks( ["tag"])) return;	//	cancel
+		}
+		//	実行！
+		local thread = newthread(); thread.start( ProjectOp.createProject, ProjectOp, t);
+		if( Dialogs.showWaiting( "$T.lbl_newproj_run", @() thread.getState()==2)){
+			ret = {
+				projname = t.projname,
+				projpath = t.projpath,
+				projlang = t.projlang,
+				updated = string( Date.currentTime()),
+				gittag = t.tag,
+				gitrepo = ProjectOp.env.repo_tool,
+				status = 1,
+			};
+			::workspace["projbasepath"] <- docdir;	//	次回からここがdocdirに
+			close();
+		}else{
+			//	途中まで作ったやつを消すか。。。
+		}
+	}
+
+	function nameevent( e){
+		if( pathlinked) updatePath();
+	}
+
+	function pathevent( e){
+	}
+}

@@ -1,0 +1,17 @@
+{
+	"resorate":150,
+	"imagedir":"../../work/img/img.portal",
+	"cliplist":[
+		{"resorate":150,"clipid":"agrad.png","subbnd":[116,264,64,16,0]},
+		{"resorate":150,"stretch":[24.0,24.0,24.0,24.0,0],"clipid":"c32.png","subbnd":[66,264,48,48,0]},
+		{"resorate":150,"clipid":"erricon.png","subbnd":[0,264,64,64,0]},
+		{"resorate":150,"clipid":"mov_pause.png","subbnd":[0,46,216,216,0]},
+		{"resorate":150,"clipid":"mov_play.png","subbnd":[218,46,216,216,0]},
+		{"resorate":150,"clipid":"titlelogo.png","subbnd":[0,0,340,44,0]}
+	],
+	"pma":1,
+	"margin":2,
+	"maxwidth":1024,
+	"maxheight":1024,
+	"filetype":3
+}

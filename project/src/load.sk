@@ -1,0 +1,11 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//
+
+runsk( "Account.sk");
+runsk( "ProjectOp.sk");
+runsk( "RPGPortalView.sk");
+runsk( "RPGPortalProjectView.sk");
+runsk( "RPGPortalHomeView.sk");
+runsk( "RPGPortalSettings.sk");
+
+runsk( "SKMarkdownView.sk");

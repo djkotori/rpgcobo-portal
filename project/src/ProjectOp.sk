@@ -1,0 +1,850 @@
+
+////////////////////////////////////////////////////////////////////////////////
+//	
+//	rpgtoolのAccountActivityからアクティビティ機能だけ取り除いたもの。
+//	
+//	portalでしかできないこと
+//	・projectのアップデート。
+//	・projectの言語変更
+//	・projectの作成。テンプレート指定。
+//	※限定的に、toolでは起動時にdata/resourceが無い場合にデフォルトアセットを読み込むことができる。この際に言語変更も出来る。
+//	
+
+local gitenv = {
+	//	project
+	repo_tool = "https://github.com/djkotori/rpgcobo-tool.git"
+	repo_asset = "https://github.com/djkotori/rpgcobo-assets.git,main"
+};
+
+{	//	.rpgcobo-env.local	※ローカルで上書き可能。
+	local f = FileRef( ".rpgcobo-env.local");
+	if( f.exists()) gitenv ... decodeJSON( f.load());
+}
+
+function exec( exe, args, out=false){
+	local t0 = skGetTime();
+	local p = popen_s();
+	local ret = p.open( exe, args, 0x100);	//	パイプ
+	local bb = ByteBuffer(), tb = ByteBuffer();
+	while( p.isrunning()){
+		p.readData( tb);
+		if( out && tb.remain) printf( "%S", tb.asText());
+		bb.putBuffer( tb);
+		suspend();
+	}
+	while( !p.eof()){	//	残った出力掃き出し
+		p.readData( tb);
+		if( out && tb.remain) printf( "%S", tb.asText());
+		bb.putBuffer( tb);
+		suspend();
+	}
+	bb.pos = 0;
+	printf( "exec[%S] exitcode=%S time=%S\n", exe["path"]||exe, p.exitcode(), skGetTime( t0));
+	return { exitcode=p.exitcode(), stdout=bb, };
+}
+
+
+//	v9.9[.9][-release][-commit]
+class TagVersion
+{
+	static releasescore = {
+		"pre":0, "pre1":1, "pre2":2, "pre3":3, "pre4":4, 
+		"test":10, "test1":11, "test2":12, "test3":13, "test4":14, "test5":15, "test6":16, "test7":17, "test8":18, "test9":19,
+		"alpha":20, "alpha1":21, "alpha2":22, "alpha3":23, "alpha4":24, "alpha5":25, "alpha6":26, "alpha7":27, "alpha8":28, "alpha9":29, 
+		"beta":40, "beta1":41, "beta2":42, "beta3":43, "beta4":44, 
+		"RC":60, "RC1":61, "RC2":62, "RC3":63, "RC4":64, 
+		"":99,
+	};
+
+	tag = null;
+
+	majver = 0;			//	major version
+	minver = 0;			//	minor version
+	rev = 0;			//	revision
+	release = null;		//	release type : こいつが正しくないとリリースとしては不正(isvalid=false)
+	commits = 0;		//	
+	score = 0;			//	
+	isvalid = false;	//	
+	
+	constructor( tag){
+		setTag( tag);
+	}
+
+	function clear(){
+		isvalid = false;
+		majver = minver = rev = score = 0;
+		release = null;
+	}
+
+	function setTag( tag){
+		this.tag = tag;
+		clear();
+		if( !length( tag)) return;
+		local pa = tag.substring( 1).split( "-");	//	最初にvとかpの文字を取る
+		local va = pa[0].split( ".");
+		majver = int( va[0]);
+		minver = int( va[1]);
+		rev = int( va[2]);
+		release = pa[1] || "";	//	paは1~3個。リリースが入ってるのは常に[1]。
+		local rs = releasescore[release];
+		if( rs == undefined){	//	コミット進んだ値がまぎれた。-1とか-12とか
+			release = ""; rs = releasescore[release];
+		}
+		score = majver * 1000000 + minver * 10000 + rev * 100 + rs;	//	これが大きい方が新しい
+		isvalid = true;
+	}
+}
+
+local nocred = ["-c","credential.helper=",];
+
+//	
+//	
+class ProjectOp
+{
+	static env = gitenv;
+	_gitexe = null;
+	
+	lfsinstalled = false;	//	git lfs installしたか。プロセス内でキャッシュすればいいかな？
+
+	function setGitExe( f){
+		_gitexe = f;
+	}
+
+	function checkGit(){
+		local r = ::exec( "./tools/git_check.ps1", []);
+		local ret = r.stdout.asText().trim();
+		local path = ret.substring( ret.lastIndexOf( "RESULT:")+7);
+		if( length( path)){
+			printf( "GIT EXE PATH = %S\n", path);
+			_gitexe = FileRef( path);
+			return true;
+		}else{
+			printf( "GIT NOT FOUND.... \n");
+			return false;
+		}
+	}
+
+	//	46MBのダウンロードする場合があるので数秒ぐらい待つ可能性あり。
+	function downloadGit(){
+		local r = ::exec( "./tools/git_get.ps1", []);
+		local ret = r.stdout.asText().trim();
+		local path = ret.substring( ret.lastIndexOf( "RESULT:")+7);
+		printf( "GIT EXE PATH = %S\n", path);
+		_gitexe = FileRef( path);
+	}
+
+	//	git lfs install は念のため毎回やって良いみたい
+	function gitLFSInstall(){
+		if( !lfsinstalled){
+			local r = ::exec( _gitexe, ["lfs","install"]);
+			local s = r.stdout.asText();
+			printf( "gitLFSInstall:\n%S\n", s);
+			lfsinstalled = true;
+		}
+	}
+
+	function gitExe(){
+		return _gitexe;
+	}
+
+	//	
+	function getTempDir(){
+		local path = `tmp/${string( skGetTime(), 16)}`;
+		local dir = FileRef( path);
+		dir.mkdirs();
+		foreach( f in dir.getList()) f.deleteAll();	//	中身を消す
+		return dir;
+	}
+
+	function getreponame(){
+		local u = env.repo_tool;	//	https://github.com/djkotori/rpgcobo-tool.git => djkotori-rpgcobo-tool
+		if( u.endsWith( ".git")) u = u.substring( 0, length( u)-4);
+		local i0 = u.lastIndexOf( "/"), i1 = u.lastIndexOf( "/", i0-1);
+		return u.substring( i1+1).replace( "/", "-");
+	}
+	
+	//	タグのクローンがあるフォルダを返す。空の場合あり。
+	function getTagCacheDir( tag){
+		local reponame = getreponame();
+		local path = `${skGetCacheDir()}/releases/$reponame-$tag`;
+		return FileRef( path);
+	}
+
+	function hasTagCacheDir( tag){
+		local dstdir = getTagCacheDir( tag);
+		return dstdir.isDirectory();
+	}
+	
+	//	特定のタグをキャッシュフォルダにクローンする。既にある場合は何もしない。
+	function cloneTagCache( tag){
+		local dstdir = getTagCacheDir( tag);
+		if( dstdir.isDirectory()){
+			printf( "cloneTagCache tag already exists : %S\n", tag);
+			return true;	//	既に存在する
+		}
+		gitLFSInstall();	//	予めgit lfs install。一度やればOK
+		FileRef( dstdir, "..").mkdirs();	//	releasesフォルダを作っとく
+		local gitexe = gitExe();
+		local repourl = env.repo_tool;
+		//	safe clone 
+		local dirtmp = getTempDir();
+		local r = ::exec( gitexe, [...nocred,"clone","-b", tag, "--single-branch", repourl, dirtmp.path], true);
+		dirtmp.moveTo( dstdir);
+		return r.exitcode==0;
+	}
+
+	//	基本的に新規プロジェクトは最新のリリースだけ。ただ、メジャーアップデートの場合は変わりそう。
+	//	命名規則は、v1.11-(test/beta...)。
+	function getReleaseList( repo){
+		local gitexe = gitExe();
+		local r = ::exec( gitexe, [...nocred,"ls-remote","--tags", ...(repo&&[repo])]);
+		local s = r.stdout.asText();
+		local a = s.split( "\n").filter( @( v) v.contains( "refs/tags/")).map( @( v){
+			local hash = v.substring( 0, v.indexOf( '\t'));
+			local tag = v.substring( v.indexOf( "refs/tags/")+10).trim();
+			local tv = TagVersion( tag);
+			return { tag=tag, hash=hash, score=tv.score};
+		}).sort( @( v) -v.score);	//	scoreの高い順にソート
+		printf( "getReleaseList........ %S %S\n", repo, encodeJSON( a));
+		return a;
+	}
+
+	//	今カレントしかとれんな
+	function getCurrentTag(){
+		local gitexe = gitExe();
+		local r = ::exec( gitexe, [...nocred,"describe","--tags","--abbrev=0"/*, "--exact-match"*/]);
+		local s = r.stdout.asText().trim();
+		printf( "getCurrentTag........ %S\n", s);
+		if( s.contains( "fatal")) return null;	//	tagが無いな
+		return s;
+	}
+
+	//	リポジトリのURLからアセットが格納されるフォルダを取得。
+	function getAssetDir( repourl){
+		if( !repourl.startsWith( "http")){	//	repourlは直接ファイルを示しても良い。自分専用のテンプレートなどはこれで済む。
+			return FileRef( repourl);
+		}
+		local dirname = string( hashcode( repourl), 16);	//	ぶつからないか心配だが
+		local assetpath = `${skGetCacheDir()}/assets/$dirname`;
+		return FileRef( assetpath);
+	}
+
+	//	アセットリポジトリに一つでも更新があったらtrue。
+	function checkAssetUpdates( asseturls){
+		local gitexe = gitExe();
+		foreach( url in asseturls){
+			if( !url.startsWith( "http")) continue;
+			local dir = getAssetDir( url);
+			if( !dir.isDirectory()) return true;	//	未ダウンロード
+			local r = ::exec( "cmd.exe", ["/c", 
+				"cd", dir.nativepath, "&", 
+				gitexe.nativepath, ...nocred, "remote", "show", "origin",
+			], true);
+			local s = r.stdout.asText();
+			if( s.contains( "local out of date")) return true;	//	リモートに更新あり
+		}
+		return false;
+	}
+	
+	//	登録されたすべてのアセットリポジトリを最新の状態にする。
+	//	新規プロジェクトのタイミングに行えばよい。
+	//	大きなダウンロードで時間がかかる場合があるので要プログレス表示。
+	function updateAssetDirs( asseturls){
+		local gitexe = gitExe();
+		foreach( url in asseturls){
+			if( !url.startsWith( "http")) continue;
+			gitLFSInstall();	//	予めgit lfs install。一度やればOK
+			local dir = getAssetDir( url);
+			if( dir.isDirectory()){	//	既にフォルダが存在する場合はgit pull。※壊れてるかもしれない！要チェック
+				local r = ::exec( "cmd.exe", ["/c", 
+					"cd", dir.nativepath, "&", 
+					gitexe.nativepath, ...nocred, "fetch", "origin", "&",
+					gitexe.nativepath, ...nocred, "reset", "--hard", "&",
+					gitexe.nativepath, ...nocred, "pull",
+				], true);	//	, "&", gitexe.nativepath, "status"
+			}else{	//	存在しないのでgit cloneが必要!!
+				FileRef( dir, "..").mkdirs();
+				if( !url.startsWith( "http")) continue;	//	invalid repourl
+				//	safe clone
+				local dirtmp = getTempDir();
+				local a = url.split( ",");
+				local r = ::exec( gitexe, [...nocred, "clone", "-b", a[1], a[0], dirtmp.nativepath], true);
+				local ret = dirtmp.moveTo( dir);
+			}
+		}
+	}
+
+	//	登録されたすべてのアセットリポジトリからテンプレートのリストを取得して返す。
+	//	アセットのフォルダは事前に細心にしておく必要あり。
+	function getTemplateList( asseturls){
+		local _getimg( dir, path){
+			local f = FileRef( dir, path);
+			if( f.exists()){
+				local bb = f.load();
+				return skLoadImage( bb);
+			}
+			return null;
+		}
+		local ret = [];
+		foreach( url in asseturls){
+			local dir = getAssetDir( url);
+			local tf = FileRef( dir, "rpgcobo_templates.json");
+			if( tf.exists()){
+				local a = decodeJSON( tf.load()).map( @( v) ({ ...v, repourl=url, bannarimg=_getimg( dir, v.bannar) }));
+				ret ... a;
+			}
+		}
+		return ret;
+	}
+
+	function isProjectOpen( proj){
+		local projdir = FileRef( proj.projpath);
+		local exef = FileRef( projdir, "rpgcobo.exe");
+		// local r = ::exec( "./tools/project_isopen.ps1", [exef.nativepath]);
+		// local esc = exef.path.replace( "\\", "\\\\");
+		// local r = ::exec( "wmic", ["process", "where", `ExecutablePath='$esc'`, "get", "ProcessId"]);
+		// local r = ::exec( "cmd.exe", [ "/c", "wmic.exe", "process", "where", `ExecutablePath='$esc'`, "get", "ProcessId"]);
+		local chkexef = FileRef( skGetCurrentDir()+"/tools/checkproc.exe");
+		local r = ::exec( chkexef.nativepath, [ exef.nativepath]);
+		return r.exitcode;
+	}
+	
+	//	プロジェクトの存在をチェックする。
+	function getProjectInfo( projdir){
+		//	setting.jsonからプロジェクト名、言語を取得。これが無い場合はどうしようもないんでnull返す。
+		local f = FileRef( projdir, "project/data/setting.json");
+		if( !f.exists()) return null;
+		local wsf = FileRef( projdir, ".sakana.ws");
+		local t = decodeJSON( f.load());
+		local ret = {
+			projpath = projdir.path,
+			projname = t["projname"]||t["appname"],	//	titleで良い気も
+			projlang = t.projlang,
+			updated = string( wsf.lastmodified),		//	ファイル無いとだめ
+			gittag = null,
+			gitrepo = null,
+			status = 1,
+		};
+		//	rpgcobo.verからバージョン情報を取得。存在しない場合はnullで良し
+		local f = FileRef( projdir, "rpgcobo.ver");
+		if( f.exists()){
+			local ver = decodeJSON( f.load());
+			ret.gittag = ver.tag;
+			ret.gitrepo = ver.repo;
+		}
+		return ret;
+	}
+	
+	//	元あるプロジェクトからコピーして作成。言語の変更も可能
+	//	.gitとかもコピー？はしないよな普通
+	//	dst: projname, projpath, projlang
+	function copyProject( proj, dst){
+		local nocopy = ["build","savedata","log","tmp",".git"];
+		local projdir = FileRef( proj.projpath);
+		local dstdir = FileRef( dst.projpath);
+		if( !dstdir.mkdirs()) return null;
+		suspend();
+		foreach( f in projdir.getList()){
+			if( nocopy.contains( f.name)) continue;
+			local df = FileRef( dstdir, f.name);
+			local b = f.copyToAsync( df).suspendget();	//	copyToAsyncで別スレッド動作
+			printf( "Copy: %S => %S, ret=%S\n", f.path, df.path, b);
+		}
+		//	プロジェクト名等を変更
+		local sf = FileRef( dstdir, "project/data/setting.json");
+		local st = decodeJSON( sf.load());
+		st.projname = dst.projname;
+		delete st["rpgid"];	//	rpgidってどうしよう
+		{
+			local bb = encodeJSON( st, 5, ByteBuffer()); bb.pos = 0;
+			sf.save( bb);
+		}
+		//	rpgcobo.verを設定⇒不要
+		//	.sakana.wsも一応作っとくか⇒不要
+		//	最後にプロジェクト言語を変更
+		if( st.projlang != dst.projlang){
+			changeProjectLanguage( dstdir, dst.projlang, "en");
+		}
+		//	
+		local ret = {
+			projname = dst.projname,
+			projpath = dst.projpath,
+			projlang = dst.projlang,
+			updated = string( Date.currentTime()),
+			gittag = proj.gittag,
+			gitrepo = proj.gitrepo,
+			status = 1,
+		};
+		return ret;
+	}
+
+	//	指定したパラメータでプロジェクトを作成する。
+	//	projpath, projname, projlang, tag, tmpl, asseturls
+	//	
+	function createProject( t){
+		local projdir = FileRef( t.projpath);
+		projdir.deleteAll();
+		projdir.mkdirs();
+		//
+		//	まずはprojdirにコピー。この時.gitはコピーせず、.gitignoreとかは専用のをコピー。
+		cloneTagCache( t.tag);
+		local srcdir = getTagCacheDir( t.tag);
+		// local r = ::exec( "cmd.exe", ["/c", "xcopy", srcdir.nativepath, projdir.nativepath, "/y", "/e", "/h"], true);
+		local p = popen_s();
+		local ret = p.open( "cmd.exe", ["/c", "robocopy", srcdir.nativepath, projdir.nativepath, "/MIR" "/XD", ".git", "/E"]);	//	※pipeすると動かない？？？
+		while( p.isrunning()) suspend();
+		// local r = ::exec( "cmd.exe", ["/c", "copy", "/y", srcdir.nativepath.."/*", projdir.nativepath, "&", "rd", "/s", "/q", projdir.nativepath.."/.git"], true);
+		
+		//	次にテンプレートをインストール。といってもこれもコピーするだけか。
+		installTemplate( projdir, t.tmpl);
+		
+		//	
+		//	プロジェクト名等を変更
+		local sf = FileRef( projdir, "project/data/setting.json");
+		local st = decodeJSON( sf.load());
+		st.projname = st.title = t.projname;
+		local bb = encodeJSON( st, 0, ByteBuffer()); bb.pos = 0;
+		sf.save( bb);
+		
+		//	rpgcobo.verを設定
+		local gi = { repo=env.repo_tool, tag=t.tag };
+		local bb = encodeJSON( gi, 0, ByteBuffer()); bb.pos = 0;
+		local vf = FileRef( projdir, "rpgcobo.ver");
+		vf.save( bb);
+
+		//	.sakana.wsも一応作っとくか
+		local ws = {
+			name = "RPG-Cobo :tool",
+			favorites = [],
+			tabs = [],
+			currentpath = "/",
+			// currentside ="side_map",		//	ここら辺はtool側でコントロールしたほうが良いかも
+			lang = null,	//	合わせて良い
+			uiscale = 100,	//	合わせて良い
+			tabsync = true,
+		};
+		local bb = encodeJSON( ws, 0, ByteBuffer()); bb.pos = 0;
+		local wf = FileRef( projdir, ".sakana.ws");
+		wf.save( bb);
+		//	
+		//	最後にプロジェクト言語を変更
+		if( st.projlang != t.projlang){
+			changeProjectLanguage( projdir, t.projlang, "en");
+		}
+		return true;
+	}
+
+	//	tmpl : { name:{ja:"ファンタジーRPG"}, dirs:[{src:"common",dst:""},...], banner:"fantasy.png", ver:"v1.*.*", desc:{ja:"aaaaaa"} }
+	function installTemplate( projdir, tmpl){
+		local tmpldir = getAssetDir( tmpl.repourl);
+		local timeptr = ptr( skGetTime());
+		foreach( d in tmpl.dirs){
+			local cp( src, dstdir){
+				local dst = FileRef( dstdir, src.name);
+				if( src.isDirectory()){
+					if( !dst.isDirectory()) dst.mkdirs();
+					foreach( ss in src.getList()) cp( ss, dst);
+				}else{
+					// src.copyTo( dst);
+					local tb = src.load(); dst.save( tb); tb.dispose();
+				}
+				if( skGetTime( ~timeptr) >= 100){
+					suspend();
+					timeptr << skGetTime();
+				}
+			}
+			local srcdir = FileRef( tmpldir, d.src);
+			local dstdir = FileRef( projdir, d.dst);
+			dstdir.mkdirs();
+			foreach( src in srcdir.getList()) cp( src, dstdir);
+			// cp( srcdir, dstdir);
+		}
+	}
+
+	//	プロジェクト言語を変更する。
+	//	対象の言語が無かった場合はenをコピー。
+	//	※このメソッドはinstallTemplateの後続処理で呼ばれることが多々ある。基本的にテンプレートは日本語で
+	//	作られて、いくつかの言語にローカライズされている状況。
+	function changeProjectLanguage( projdir, langcode, deflc="en"){
+		//	一時的にresrootを変えるとか？ちょっと考えないと。。。
+		local res = ::createResource( FileRef( projdir, "project"));
+		local tr = res.getResource( "/data/trns/%S.trns" % langcode);
+		if( !tr) tr = res.getResource( "/data/trns/%S.trns" % deflc);
+		if( tr){
+			local newdict = ::loadconf( tr);
+			//	confを全て翻訳適用したうえで再保存。dataのみ！
+			local tconf = ::loadconf( res.getResource( "/conf/load.conf"));
+			override( tconf, newdict.transdict, false);
+			local dataconfs = ("dict","setting","type","player","job","cond","skill","item","weapon","armor","enemy","map","quest","store","gvar","point","macro");
+			foreach( i in dataconfs){
+				local f = FileRef( projdir, "project/data/%S.conf" % i);
+				local bb = encodeJSON( tconf[i], 5, ByteBuffer()); bb.pos = 0;
+				f.save( bb);
+			}
+		}else{
+			//	何の辞書もない場合もprojlangだけは変えられるように。
+		}
+		//	既存の翻訳言語にソース情報を移行。乱暴だが全ての辞書は変換チェック済み、srcver=1で統一する。
+		local created = string( Date.currentTime());
+		foreach( f in FileRef( projdir, "project/data/trns").getList( "*.trns")){
+			local t = decodeJSON( f.load());
+			t._meta.srcver <- 1;
+			t._meta.created <- created;
+			t.check <- "";
+			local bb = encodeJSON( t, 5, ByteBuffer()); bb.pos = 0;
+			f.save( bb);
+		}
+		//	最後にprojlang
+		{
+			local f = FileRef( projdir, "project/data/setting.json");
+			local t = decodeJSON( f.load());
+			t.projlang <- langcode;
+			local bb = encodeJSON( t, 5, ByteBuffer()); bb.pos = 0;
+			f.save( bb);
+		}
+	}
+
+	//	プロジェクト名を変更する
+	function renameProject( projdir, newname){
+		local f = FileRef( projdir, "project/data/setting.json");
+		if( !f.exists()) return false;
+		local t = decodeJSON( f.load());
+		t.projname <- newname;
+		local bb = encodeJSON( t, 5, ByteBuffer()); bb.pos = 0;
+		f.save( bb);
+		return true;
+	}
+
+	//////////////////////////////////////////////////////////////////////////////////////////
+	//	プロジェクトのアップデート！
+
+	//	指定したタグをマージした結果を返す。このメソッドでは実際の反映は行われない。
+	//	コンフリクトしている場合も最後までマージ処理を進ませる。
+	//	.から始まるファイルは無視。
+	function createMergeResult( projdir, basetag, newtag){
+		local basedir = getTagCacheDir( basetag);
+		local srcdir = getTagCacheDir( newtag);
+		local mergemap = {};		//	path:ByteBuffer|FileRef。最後に書き込む。変更があったもののみ。
+		local gitexe = gitExe();
+		local merge( path){
+			local src = FileRef( srcdir, path);
+			if( src.name[0] == '.') return;			//	.xxxは全部無視！
+			if( src.isDirectory()){
+				foreach( f in src.getList()){
+					merge( path .. "/" .. f.name);
+				}
+			}else{
+				local base = FileRef( basedir, path);
+				local dst = FileRef( projdir, path);
+				if( base.exists() && dst.exists()){
+					//	先にbase～srcが未変更かチェックする。
+					local srcmd5 = getMD5( src), basemd5 = getMD5( base);
+					if( srcmd5 == basemd5) return;
+					local dstmd5 = getMD5( dst);
+					//	dstがbaseから変化なし。この場合はsrcそのまま上書きすればいい。逆に、この状態でバイナリをmerge-fileするとコンフリクトになっちゃう？
+					if( basemd5 == dstmd5){
+						mergemap[path] <- {src=src,type="W"};	//	上書き
+					}else{
+						//	git merge-file
+						local r = ::exec( gitexe, [...nocred, "merge-file", "-p", dst.path, base.path, src.path]);	//	current, base, other
+						//	exit code check...	//	ファイル更新。コンフリクトの可能性あり。未変更時はmergemapも無変更。
+						if( r.exitcode){
+							mergemap[path] <- {src=src,type="C"};	//	conflict!!!!!!!!!
+						}else{
+							mergemap[path] <- {src=r.stdout,type="M"};	//	マージ
+						}
+					}
+				}else
+				if( !base.exists() && dst.exists()){	//	足されたファイルが既に存在しちゃってる。マージはできなそう
+					if( getMD5( src) == getMD5( dst)) return;	//	ファイルが同じなら無操作で問題なし。
+					mergemap[path] <- {src=src,type="C"};	//	conflict!!!!!!!!!
+				}else{
+					mergemap[path] <- {src=src,type="U"};	//	ファイル追加。足すだけ
+				}
+			}
+		}
+		merge( ".");		//	suspendのオーバーヘッドが馬鹿にならないので4並列ぐらいするべき。
+		return mergemap;	//	Table.filter( @( v, i) v.type=="C")でコンフリクトあるかチェック
+	}
+
+	//	マージ先のファイルが書き込み可能かをチェックする。
+	function checkMergeFileLocked( projdir, mergemap){
+		local a = [];	//	ロックされてたファイルのリスト
+		foreach( i, v in mergemap){
+			local dst = FileRef( projdir, i);
+			if( !dst.exists()){
+				printf( "file not exists (writable) : %S\n", i);
+			}else{
+				local fs = dst.open( "r+");
+				if( fs){
+					printf( "file is writable : %S\n", i);
+					fs.close();
+				}else{
+					printf( "FILE IS LOCKED! : %S\n", i);
+					a .. dst;
+				}
+			}
+		}
+		return length( a) && a;
+	}
+
+	//	マージの結果を反映する。rpgcobo.verも更新する。
+	function applyMergeResult( projdir, tag, mergemap){
+		local c = 0;
+		foreach( i, v in mergemap){
+			local dst = FileRef( projdir, i);
+			local dstdir = FileRef( dst, "..");
+			if( !dstdir.exists) dstdir.mkdirs();
+			local src = v.src;
+			if( src instanceof FileRef){
+				src.copyTo( dst);	//	SHFileOperationでやってるせいかおっそい。。。
+				printf( "copy %S => %S\n", src.path, dst.path);
+			}else
+			if( src instanceof ByteBuffer){
+				dst.save( src);
+				printf( "data %S => %S\n", src.remain, dst.path);
+			}
+			if( !((c++)&7)) suspend();
+		}
+		//	rpgcobo.verを更新
+		local gi = { repo=env.repo_tool, tag=tag };
+		local bb = ByteBuffer(); bb.putText( encodeJSON( gi)); bb.pos = 0;
+		local vf = FileRef( projdir, "rpgcobo.ver");
+		// vf.save( bb);
+		printf( "rpgcobo.ver = %S\n", encodeJSON( gi, 5));
+		return true;
+	}
+
+	//////////////////////////////////////////////////////////////////////////////////////////
+	//	バックアップ関係。ツールと全く同じのをコピー。。。。
+
+	function visitfile( f, fn){
+		if( !fn( f)) return;
+		if( f.isDirectory()){
+			foreach( cf in f.getList()) visitfile( cf, fn);
+		}
+	}
+
+	function saveProjectBackup( proj, outfile, isbg=false){
+		local projdir = FileRef( proj.projpath);
+		local visitfile = visitfile;
+		local fn = @( prgfunc){
+			local t0 = skGetTime();
+			local srcdir = FileRef( projdir, "project");
+			//	zipするファイルを集める
+			local ziplist = [];
+			foreach( dn in ["data","resource"]){
+				visitfile( FileRef( srcdir, dn), @( f) f.isDirectory()? true : ziplist .. f);
+			}
+			foreach( f in FileRef( srcdir, "plugin").getList()){
+				if( f.name != "rpgtools") visitfile( f, @( f) f.isDirectory()? true : ziplist .. f);
+			}
+			//	zip実行。6並列で高速化
+			local num = length( ziplist), size = 0;
+			local zip = ZipWriter( outfile);
+			local fa = [], paranum = isbg ? 2 : 6;
+			for( local l = 0;l < num;l ++){
+				local f = ziplist[l];
+				fa .. (f, ::getRelativePath( srcdir.path, f.path));
+				if( length( fa)>=paranum || l==num-1){
+					size += zip.writeLocalFilesAtOnce( fa);
+					fa.clear();
+					prgfunc( l * 1.0 / num, sizestr( size));
+				}
+				if( isbg && (l&1)) suspend();	//	ファイル読み込みでも重いのでbgの時はsuspendをマメに
+			}
+			//	.backupinfo
+			local verf = FileRef( projdir, "rpgcobo.ver"), ver = verf.exists()? decodeJSON( verf.load()) : null;
+			local backupinfo = {
+				projname = proj.projname,
+				time = string( Date.currentTime()),
+				auto = isbg,
+				...ver,
+			};
+			local bb = encodeJSON( backupinfo, 5, ByteBuffer()); bb.pos = 0;
+			zip.writeLocalBuffer( bb, ".backupinfo");
+			zip.writeCentral();
+			zip.close();
+			printf( "Backup done! time=%S\n", skGetTime( t0));
+		}
+		//	プログレスダイアログ開始
+		return fn;
+	}
+	
+	function restoreProjectBackup( proj, zipfile){
+		local projdir = FileRef( proj.projpath);
+		local fn = @( prgfunc){
+			local zip = ZipReader( zipfile);
+			local outdir = FileRef( projdir, "project"), tmpdir = FileRef( skGetCacheDir().."tmp/restore");
+			if( tmpdir.exists()) tmpdir.deleteAll();
+			suspend();
+			tmpdir.mkdirs();
+			//	moveToは操作が早すぎると失敗するなー
+			local trymove( f0, f1){
+				suspend();
+				printf( "file moving ... %S => %S\n", f0.path, f1.path);
+				for( local l = 0;l < 5;l ++){
+					if( f0.moveTo( f1)) return true;
+					sleep( 50);
+				}
+				throw Exception( "file move error %S => %S" % (f0.path, f1.path));
+			}
+			//	出力先をクリア。消せなかったら失敗
+			local mvlist = [];	//	移動の取り消しのために残す。。。
+			try{
+				foreach( dn in ["data","resource"]){
+					local d0 = FileRef( outdir, dn), d1 = FileRef( tmpdir, dn);
+					trymove( d0, d1);
+					mvlist .. (d0,d1);
+				}
+				foreach( d0 in FileRef( outdir, "plugin").getList()){
+					if( d0.name == "rpgtools") continue;	//	rpgtoolsは現状のまま
+					local d1 = FileRef( tmpdir, "plugin-"..d0.name);
+					trymove( d0, d1);
+					mvlist .. (d0,d1);
+				}
+			}catch( ex){
+				printf( "BACKUP FILE MOVE FAILURE!!!!!!!!!!!!!!\n");
+				foreach( v in mvlist) trymove( v[1], v[0]);	//	これはさすがにエラー起きないっしょ
+				throw ex;
+			}
+			//	zipを展開
+			local ea = [], dirmap = {};
+			local entries = zip.entries, num = length( entries);
+			for( local l = 0;l < num;l ++){
+				ea .. entries[l];
+				if( length( ea)>=6 || l==num-1){
+					local ra = zip.readEntriesAtOnce( ea);
+					ea.clear();
+					foreach( r in ra){
+						if( r.fn == ".backupinfo") continue;
+						local i = r.fn.lastIndexOf( "/");
+						if( i >= 0){
+							local dir = r.fn.substring( 0, i);
+							if( !dirmap[dir]){ FileRef( outdir, dir).mkdirs(); dirmap[dir]<-1; }
+						}
+						local f = FileRef( outdir, r.fn);
+						f.save( r.data);
+					}
+					prgfunc( l * 1.0 / num, l.." / "..num);
+				}
+			}
+			zip.close();
+			tmpdir.deleteAll();
+		};
+		return fn;
+	}
+
+	function getFullBackupFile( projdir){
+		return FileRef( `${skGetCacheDir()}/fullbackup/${hashcode( projdir.path)}.zip`);
+	}
+
+	//	フルバックアップはpotal内のfullbackupフォルダに保存される。
+	//	backupフォルダ以外の全てのファイルがzipに保存される。
+	//	一つのプロジェクトに対してフルバックアップは一つのみ。
+	function saveProjectFullBackup( projdir){
+		//	outfileはprojdir.pathから
+		local outdir = FileRef( `${skGetCacheDir()}/fullbackup`);
+		outdir.mkdirs();
+		local outfile = getFullBackupFile( projdir);
+		local visitfile = visitfile;	//	thisが変わる
+		//
+		local fn = @( prgfunc){
+			local excludes = { "backup"=1, "log"=1, "tmp"=1, }
+			local t0 = skGetTime();
+			//	zipするファイルを集める
+			local ziplist = [];
+			visitfile( projdir, @( f) excludes[f.name] ? false : f.isDirectory() ? true : ziplist .. f);
+			//	zip実行。6並列で高速化
+			local num = length( ziplist), size = 0;
+			local zip = ZipWriter( outfile);
+			local fa = [], paranum = 6;
+			for( local l = 0;l < num;l ++){
+				local f = ziplist[l];
+				fa .. (f, ::getRelativePath( projdir.path, f.path));
+				if( length( fa)>=paranum || l==num-1){
+					size += zip.writeLocalFilesAtOnce( fa);
+					fa.clear();
+					prgfunc( l * 1.0 / num, sizestr( size));
+				}
+			}
+			//	.backupinfo
+			local verf = FileRef( projdir, "rpgcobo.ver"), ver = verf.exists()? decodeJSON( verf.load()) : null;
+			local backupinfo = {
+				projpath = projdir.path,
+				time = string( Date.currentTime()),
+				...ver,
+			};
+			local bb = encodeJSON( backupinfo, 5, ByteBuffer()); bb.pos = 0;
+			zip.writeLocalBuffer( bb, ".fullbackupinfo");
+			zip.writeCentral();
+			zip.close();
+			printf( "FullBackup done! time=%S\n", skGetTime( t0));
+		}
+		return fn;
+	}
+
+	//	フルバックアップのレストア
+	function restoreFullProjectBackup( proj, zipfile){
+		local projdir = FileRef( proj.projpath);
+		local fn = @( prgfunc){
+			local zip = ZipReader( zipfile);
+			local outdir = projdir, tmpdir = FileRef( skGetCacheDir().."tmp/restore");
+			if( tmpdir.exists()) tmpdir.deleteAll();
+			suspend();
+			tmpdir.mkdirs();
+			//	moveToは操作が早すぎると失敗するなー
+			local trymove( f0, f1){
+				suspend();
+				printf( "file moving ... %S => %S\n", f0.path, f1.path);
+				for( local l = 0;l < 5;l ++){
+					if( f0.moveTo( f1)) return true;
+					sleep( 50);
+				}
+				throw Exception( "file move error %S => %S" % (f0.path, f1.path));
+			}
+			//	出力先をクリア。消せなかったら失敗。フルバックアップの場合はbackup,log,tmp以外は全て
+			//	※この処理は、出力先に元のファイルが残ってしまわないためのもの
+			local excludes = { "backup"=1, "log"=1, "tmp"=1, }
+			local mvlist = [];	//	移動の取り消しのために残す。。。
+			try{
+				foreach( d0 in outdir.getList()){
+					if( excludes[d0.name]) continue;
+					local d1 = FileRef( tmpdir, d0.name);
+					trymove( d0, d1);
+					mvlist .. (d0,d1);
+				}
+			}catch( ex){
+				printf( "BACKUP FILE MOVE FAILURE!!!!!!!!!!!!!!\n");
+				foreach( v in mvlist) trymove( v[1], v[0]);	//	これはさすがにエラー起きないっしょ
+				throw ex;
+			}
+			//	zipを展開
+			local ea = [], dirmap = {};
+			local entries = zip.entries, num = length( entries);
+			for( local l = 0;l < num;l ++){
+				ea .. entries[l];
+				if( length( ea)>=6 || l==num-1){
+					local ra = zip.readEntriesAtOnce( ea);
+					ea.clear();
+					foreach( r in ra){
+						if( r.fn == ".backupinfo") continue;
+						local i = r.fn.lastIndexOf( "/");
+						if( i >= 0){
+							local dir = r.fn.substring( 0, i);
+							if( !dirmap[dir]){ FileRef( outdir, dir).mkdirs(); dirmap[dir]<-1; }
+						}
+						local f = FileRef( outdir, r.fn);
+						f.save( r.data);
+					}
+					prgfunc( l * 1.0 / num, l.." / "..num);
+				}
+			}
+			zip.close();
+			tmpdir.deleteAll();
+		};
+		return fn;
+	}
+}
+
+::ProjectOp = ProjectOp();

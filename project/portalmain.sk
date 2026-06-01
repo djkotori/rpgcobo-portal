@@ -1,0 +1,151 @@
+﻿/////////////////////////////////////////////////////////////////////////////
+//	ポータルアプリのメイン
+
+runsk( "Workspace.sk");	//	最初にワークスペースをロード。skstudioのワークスペースとは別物。
+if( ::workspace.lang) ::lang <- Language( chooseLanguage( ::workspace.lang));	//	ワークスペースに保存された言語を指定
+{	//	ファイルへのログ開始。1日ごとにファイル名更新
+	FileRef( "log").mkdirs();
+	local d = Date(); changeStdOutFile( FileRef( "log/p%04d%02d%02d.log" % (d.tm_year+1900, d.tm_mon+1, d.tm_mday)));
+}
+
+//	再起動時にはウィンドウは生成済み
+if( !skGetScreenSize( [0,0])[0]){
+	local s = ::workspace.uiscale*0.01;
+	skCreateScreen( "RPG-Cobo :Portal", 1024*s, 768*s, 4 | 16);
+}
+
+skBeginRender();
+skClearParam( #ClearParam(){ R=G=B=0.0; A=1.0; });
+
+runsk( "/load.sk");
+
+////////////////////////////////////////////////////////////////////////////////////
+
+::rootview = SKRootView();
+::rootview.resizemode = 2;
+::rootview.setDisplayResolution( ::workspace.uiscale*0.01);
+
+if( !::["gpui"]) GPUI();	//	GPUIが初期化されてなかったらする！
+
+//	RPGPortalView初期化の前に
+::account = Account.load() || Account();
+
+//	RPGPortalView initialize
+::rpgportal <- ::loadSKView( "/ui/portal.ui", RPGPortalView);
+rpgportal.stretchSize( rootview.bnd.w, rootview.bnd.h);
+::rootview.addChild( rpgportal);
+
+//	アドオンはこのタイミング？どこでも良いか
+skLoadAddon( "popen_s");
+
+//	初期化処理
+if( !length( workspace["asseturls"])) workspace.asseturls <- [ProjectOp.env.repo_asset];
+
+//	gitをダウンロード。インストールされている場合はやらない
+local gitlblptr = ptr( "$T.bgtask_checkgit");
+
+rpgportal.bgtask.addTask({
+	id="git", func=@(){
+		local gitpath = ::workspace["gitpath"];
+		if( gitpath){
+			local f = FileRef( gitpath);
+			if( f.exists()){
+				ProjectOp.setGitExe( f);
+				return;
+			}
+		}
+		if( !ProjectOp.checkGit()){
+			gitlblptr << "$T.bgtask_dlgit"
+			ProjectOp.downloadGit();
+		}
+		::workspace.gitpath <- ProjectOp.gitExe().path;
+		::saveWorkspace();
+	},
+	lbl=@() ~gitlblptr,
+});
+
+function mainCheck(){
+	//	最新版のツールを確認。無かったらダウンロード
+	local toollblptr = ptr( "$T.bgtask_checktool");
+
+	rpgportal.bgtask.addTask({
+		id="tool", func=@(){
+			::workspace.tooltags <- ProjectOp.getReleaseList( ProjectOp.env.repo_tool);
+			local tag = ::workspace.tooltags[0]["tag"];
+			if( tag && !ProjectOp.hasTagCacheDir( tag)){
+				toollblptr << ("$T.bgtask_dltool(%S)" % tag);
+				ProjectOp.cloneTagCache( tag);
+			}
+		},
+		lbl=@() ~toollblptr,
+	});
+
+	//	アセットを確認。まず最初に
+	local assetlblptr = ptr( "$T.bgtask_checkassets");
+
+	rpgportal.bgtask.addTask({
+		id="assets", func=@(){
+			if( ProjectOp.checkAssetUpdates( workspace.asseturls)){
+				assetlblptr << ("$T.bgtask_dlassets");
+				ProjectOp.updateAssetDirs( workspace.asseturls);
+			}
+		},
+		lbl=@() ~assetlblptr,
+	});
+
+	//	ポータルのバージョンアップ処理
+	local upgradePortal(){
+		local args = [ProjectOp.gitExe().nativepath, workspace.portalver.latest, string( skGetProcessID()), ];
+		local p = popen_s();
+		local ret = p.open( "./tools/update_portal.ps1", args, 0);
+		sleep( 1000);
+		skExit( 0);
+		sleep( 1000000);
+	}
+
+	rpgportal.bgtask.addTask({
+		id="portal", func=@(){
+			local curtag = ProjectOp.getCurrentTag( "") || "";
+			local portaltags = ProjectOp.getReleaseList( ProjectOp.env["repo_portal"]);	//	ポータルのtag取得はリポジトリ指定不要
+			local latesttag = portaltags[0]["tag"] || "";
+			local t = ::workspace.portalver <- { tag = curtag, latest = latesttag, };
+			//	ここで保存
+			::workspace.lastchk <- string( Date.currentTime());	//	long保存できない。。。
+			::saveWorkspace();
+			if( TagVersion( t.latest).score > TagVersion( t.tag).score){
+				if( Dialogs.confirm( {msg=rtf( tmpl( T.tmpl_confirm_upgrade_app, {v=t.latest}))} )){
+					upgradePortal();
+				}
+			}
+		}
+		lbl=@() "$T.bgtask_checkportal",
+	});
+}
+
+{
+	local t = Date.currentTime();
+	local lastchk = long( ::workspace["lastchk"]);
+	if( !::arguments.contains( "-nocheck")){
+		mainCheck();
+	}
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////
+
+::rootview.updateMatrixAll( true);	//	umm??? 最初のバッファ描画で位置ずれ。最初の描画時にmatが正しくないため
+
+TipsRunner.start( {
+	tipsv = "/skstudio/ui/parts/tipsv.ui",
+	tipsh = "/skstudio/ui/parts/tipsh.ui",
+});
+
+local t0 = skGetTime();
+while( !::rootview.quit){
+	local t1 = skGetTime(), dt = t1-t0; t0 = t1;
+	rootview.update( dt);
+	suspend();
+}
+
+printf("OWARI!!!!!!\n");
+skEndRender();

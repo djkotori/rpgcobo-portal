@@ -1,0 +1,365 @@
+
+import VirtualKeyCode;
+import ModifiersMask;
+import FileDialogMode;
+import MoviePlayerState;
+
+::homeenv <- {
+	url_home = "https://rpg-cobo.com/portal",
+	url_homecontent = "$HOME/home.json",
+};
+
+{	//	.rpgcobo-env.local	※ローカルで上書き可能。
+	local f = FileRef( ".rpgcobo-env.local");
+	if( f.exists()) ::homeenv ... decodeJSON( f.load());
+}
+
+//	ホームメニュー
+//	
+class RPGPortalHomeView extends SKLibView
+{
+	tablist = null;			//	GPUIListView
+	contentview = null;		//	SKGroupView
+	content = null;			//	HomeContent
+
+	allcontents = null;		//	home.json : ここからフィルタしてtablistに入れる
+
+	function loadFinished(){
+		tablist = findChild( "tablist");
+		contentview = findChild( "content");
+		newthread().start( setupContents, this);
+
+		local chk = findChild( "showhome");
+		chk.setSelected( !!::workspace["showhome"]);
+
+		addEventListener( ACTION_EVENT, actionevent);
+	}
+
+	function actionevent( e){
+		switch( e.src["name"]){
+		case "showhome":
+			::workspace.showhome <- e.src.isSelected();
+			::saveWorkspace();
+			break;
+		case "goprojbtn":
+			::rpgportal.setMainView( 1);
+			break;
+		}
+	}
+
+	/////////////////////////////////////////////////////////////////////////////////////
+	//	content
+
+	function setupContents(){
+		local c;
+		try{
+			local bb = downloadMedia( homeenv.url_homecontent, 3*60).loadData();
+			c = decodeJSON( bb);
+		}catch( ex){
+			printexception( ex);
+			c = [
+				{ lang="ja", title="準備中", icon="🌈", media="/ui/home/home_ja.ui" },	//	home_ja.ui test.mp4 v1.01.json
+			];
+		}
+		allcontents = c;
+		local lang = ::lang.code;
+		local a = c.filter( @( v) v.lang==lang);
+		if( !a[0]) a = c.filter( @( v) v.lang=="en");
+		if( !a[0]) a = c.filter( @( v) v.lang=="ja");
+		//	フィルタする。
+		a.sort( @( v){
+			local r = v.rate;
+			local sc = r.base;
+			return -sc;	//	スコアの逆
+		});
+		if( length( a) > 3) a = a.slice( 0, 3);	//	3個まで？
+		//	タブに並べる
+		tablist.setRowCount( length( a));
+		foreach( i,v in a){
+			local r = tablist.rows[i];
+			local lbl = v["icon"] ? ("%S  %S " % (v.icon,v.title)) : v.title;
+			r.setValue( "lbl", lbl);
+			r.ref = v;
+		}
+		switchTab( tablist.rows[0]);
+	}
+
+	//	
+	function switchTab( tab){
+		foreach( r in tablist.rows){
+			r.findChild( "tabbtn").setSelected( tab==r);
+		}
+		if( content){
+			content.view.removeFromParent();
+		}
+		local c = createContent( tab.ref);	//	ロードもされる。時間かかるとちょい困る
+		contentview.addChild( c.view);
+		content = c;
+	}
+
+	function createContent( t){
+		local c = null, media = t.media;
+		if( media.endsWith( ".ui")){
+			c = UIHomeContent();
+		}else
+		if( media.endsWith( ".mp4")){
+			c = MovieHomeContent();
+		}else
+		if( media.endsWith( ".md.json")){
+			c = MarkdownHomeContent();
+		}
+		c.loadContent( t);
+		return c;
+	}
+}
+
+//	同期呼び出しMoviePlayer
+//	
+class SyncMoviePlayer
+{
+	player = null;			//	MoviePlayer
+	movinfo = null;			//	情報
+	movtex = null;			//	Texture
+	movsp = null;
+	
+	//	
+	function loadMovie( f){
+		soundmanager.checkctx();
+		player = MoviePlayer( ::soundmanager.drymixer);
+		local ret = player.setSource( f);
+		if( ret != 1) return ret;
+		if( player.getState() == STATE_INIT){
+			suspend();
+		}
+		player.prepare();
+		while( player.getState() <= STATE_LOAD){
+			suspend();
+		}
+		local t = movinfo = player.getMovieInfo();
+		movtex = Texture();
+		movtex.create( t.width, t.height, SK_RGBA, 1, 0);
+		movsp = Sprite( movtex);
+		return ret;
+	}
+
+	//	
+	function play(){
+		return player.play();
+	}
+
+	//	
+	function pause(){
+		player.pause();
+	}
+
+	function close(){
+		player.close();
+		for( ;;){
+			local st = player.getState();
+			if( st == STATE_CLOSE || st == STATE_ERROR){
+				break;
+			}
+			suspend();
+		}
+		player = null;
+	}
+	
+	// 途中から再生
+	function tell(){
+		return player ? player.tell() : 0;
+	}
+	
+	//	
+	function seek( t){
+		if( !player.seek( t)) return false;
+		while( player.getState() == STATE_LOAD){
+			suspend();
+		}
+		player.capture( movtex);
+		return true;
+	}
+	
+	function update( dt){
+		switch( player.getState()){
+		case STATE_PLAY:
+		case STATE_LOAD:
+		case STATE_READY:
+			return player.capture( movtex);
+		}
+		return false;
+	}
+}
+
+//	
+//	
+class UIHomeContent
+{
+	view = null;			//	.uiがそのままviewに
+
+	function loadContent( t){
+		local r = downloadMedia( t.media);
+		view = loadSKView( r);
+		view.action( "show");
+	}
+}
+
+//	
+//	
+class MovieHomeContent
+{
+	view = null;
+	movg = null;
+	movview = null;			//	SKImageView
+	ctrview = null;			//	コントローラー全体
+	seekbar = null;			//	
+
+	movplayer = null;		//	SyncMoviePlayer
+
+	playing = false;		//	
+	moventered = false;
+	seeking = false;
+	seekthread = null;
+	nextseek = null;
+	
+	constructor(){
+		local v = view = loadSKView( "/ui/home_mov.ui");
+		movplayer = SyncMoviePlayer();
+		movg = v.findChild( "movg");
+		movview = v.findChild( "mov");
+		ctrview = v.findChild( "ctr");
+		seekbar = v.findChild( "seekbar");
+		seekbar.addEventListener( MOUSE_EVENT, seekevent);
+		movg.addEventListener( MOUSE_EVENT, movgevent);
+		v.anime( -10);	//	ctrを非表示に
+	}
+
+	function loadContent( t){
+		local r = downloadMedia( t.media);
+		movplayer.loadMovie( r.file);	//	実ファイルが必要
+		movview.setSprite( movplayer.movsp);
+		movview.updateLayout();
+		//	bind values
+		local p = movplayer, len = float( p.movinfo.length);
+		view.bindValue( "timelbl", @(){
+			local sec = p.tell() / 1000;
+			return sprintf( "%02d:%02d", sec/60, sec%60);
+		});
+		seekbar.bindValue( @(){
+			local ms = p.tell(), r = ms / len;
+			return r * 10.0;
+		});
+		movview.addUpdateFunc( @( dt){
+			if( p.update( dt)) repaint();
+			return true;
+		});
+		playing = movplayer.play();
+	}
+
+	function close(){
+		movplayer.close();
+		if( seekthread) seekthread.wakeupThrow( "interrupt");
+	}
+
+	function _x2time( lx){
+		local f = Math.saturate( (lx-4.0)/(seekbar.bnd.w-8.0));
+		local len = movplayer.movinfo.length;
+		return int( f * len);
+	}
+
+	//	
+	function seekTo( ms){
+		nextseek = ms;
+		if( !seekthread){
+			seekthread = newthread( "movie seek");
+			seekthread.start( @(){
+				try{
+					while( nextseek != null){
+						local ms = nextseek;
+						nextseek = null;
+						movplayer.seek( ms);
+						movview.repaint();
+					}
+				}catch( ex){
+					printexception( ex);
+				}
+				seekthread = null;
+			}, this);
+		}
+	}
+
+	//	
+	function waitSeek(){
+		while( seekthread) suspend();
+	}
+
+	function seekevent( e){
+		e.computeLocal( seekbar.getInvMatrix());
+		switch( e.id){
+		case MOUSE_PRESSED:
+			movplayer.pause();
+			seekTo( _x2time( e.lx));
+			break;
+		case MOUSE_RELEASED:
+			waitSeek();
+			if( playing) movplayer.play();
+			break;
+		case MOUSE_DRAGGED:
+			seekTo( _x2time( e.lx));
+			break;
+		}
+	}
+
+	function movgevent( e){
+		switch( e.id){
+		case MOUSE_MOVED:
+		case MOUSE_ENTERED:
+			local b = movg.contains( e.src);
+			if( !moventered && b){
+				moventered = true;
+				view.anime( 0, 40);
+			}
+		 	break;
+		case MOUSE_EXITED:
+			local b = movg.contains( e.dst);
+			if( moventered && !b){
+				moventered = false;
+				view.anime( -10, 40);
+			}
+			break;
+		}
+	}
+}
+
+//	.mdのパースを行う必要がある。。。。。
+//	
+class MarkdownHomeContent
+{
+	view = null;			//	.uiがそのままviewに
+	mdlist = null;			//	GPUIListView
+	mdview = null;			//	SKMarkdownNode
+
+	function loadContent( t){
+		local r = downloadMedia( t.media);
+		local t = decodeJSON( r.loadData()), ast = t.ast;
+		//	astにタイトルをぶっこむ
+		ast.children[0] <- {
+			type="HorizontalRule", 
+		}
+		ast.children[0] <- {
+			type="TitleLink", 
+		}
+		ast.children[0] <- {
+			type="Title", title="ああああああああああ", date="2026 / 03 / 20", 
+		}
+		//
+		view = loadSKView( "/ui/home_md.ui");
+		mdlist = view.findChild( "LIST");
+		mdview = SKMarkdownNode.createMarkdownNode( ast);
+		(mdview.viewdata = ::SKViewEntityData()).staticparams = [( SKViewPropertyID.SIZE_STATIC, (100,100))];
+		mdview.stretchSize( 100, 100);
+		mdlist.addRow( mdview);
+		mdview.updateLayout();
+
+		view.action( "show");
+	}
+}

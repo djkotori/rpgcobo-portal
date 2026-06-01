@@ -1,0 +1,384 @@
+
+import VirtualKeyCode;
+import FileDialogMode;
+import AccountState;
+
+//	ファイルのダウンロード、キャッシュ
+
+local url2fn( url){
+	local i0 = url.lastIndexOf( "/"), i1 = url.lastIndexOf( "/", i0-1)+1;
+	return url.substring( i1).replace( "/", "-");
+}
+
+local cacheres(){
+	local r = getResource( "/portalcache");
+	if( !r){
+		local dir = FileRef( skGetCacheDir()+"/portalcache");
+		r = createResource( dir);
+		::resroot.list .. r;
+		r.pres = ::resroot;
+	}
+	return r;
+}
+
+//	
+function getMediaFile( url){
+	if( url[0]=='/'){	//	/から始まる場合はリソースからの相対ファイル
+		return resroot.getResource( url).file;
+	}else{
+		//	キャッシュの場所
+		local dir = FileRef( skGetCacheDir()+"/portalcache");
+		return FileRef( dir, url2fn( url));
+	}
+}
+
+function getMediaResource( url){
+	if( url[0]=='/'){
+		return resroot.getResource( url);
+	}else{
+		return cacheres().getResource( url2fn( url));
+	}
+}
+
+function downloadMedia( url, cachetime=0){
+	if( url.contains( "$")) url = ~( compiletemplate( url), {HOME=::homeenv.url_home});
+	//
+	if( url[0]=='/') return resroot.getResource( url);
+	local f = getMediaFile( url);
+	if( f.exists()){
+		if( cachetime){
+			local dt = Date().currentTime() - f.lastmodified;
+			if( dt[0] < cachetime) return getMediaResource( url);
+		}else{
+			return getMediaResource( url);
+		}
+	}
+	try{
+		local dir = FileRef( skGetCacheDir()+"/portalcache");
+		dir.mkdirs();
+		local tmpf = FileRef( f.path+".dl");	//	テンポラリにダウンロードしてからリネーム
+		local http = HTTPClient();
+		local dlf = http.request( url, "GET", null, HTTPFileReceiver( tmpf));
+		printf( "downloadMedia url=%S  file=%S %S statuscode=%S\n", url, dlf["path"], dlf?.exists(), http["statuscode"]);
+		if( f.exists()){ f.deleteFile(); suspend(); } //	ちょっと待たないとたまに失敗する～
+		tmpf.moveTo( f);
+		local dir = cacheres();
+		local r = FileResource( f, dir);
+		dir.list .. r;
+		return r;
+	}catch( ex){
+		//	もしダウンロード失敗してもキャッシュが残ってたらそれを返す
+		if( f.exists()) return getMediaResource( url);
+		throw ex;
+	}
+}
+
+//	PreferenceDialogが動くようにメソッドだけ入れとく
+if( !::["skstudio"]) ::skstudio <- {
+	function menuRelaunch(){
+		skRestart();
+	}
+
+	function _savews(){
+		::saveWorkspace();
+	}
+}
+
+//	ポータルアプリのルートビュー。
+//	
+class RPGPortalView extends SKLibView
+{
+	titlebar = null;
+	mainview = null;
+
+	bgtask = null;
+	
+	appmenulist = [
+		{ id="web", lbl="$T.lbl_site_official", icon="\ue89e"}
+		"-",
+		{ id="check", lbl="$T.lbl_check_update", icon="\ue2e7", rlbl=@() rtf( "[i]"..(::workspace["portalver"] || {tag="", latest=""}).tag) },
+		"-",
+		{ id="console", lbl="$T.menu_view_console", icon="\ueb8e", modkey="^@"}
+		{ id="uiscale", lbl="$T.act_setting_ctxmenu_uiscale", icon="\ue8ff", submenu=@() ::uiscalelist.map( @( v)+{ ...v, checked = ::workspace["uiscale"]==v.val, })}
+		{ id="prefs", lbl="$T.menu_file_prefs", icon="\ue8b8", modkey="^,",},
+		"-",
+		{ id="quit", lbl="$T.menu_file_quit", icon="\ue8ac", modkey="~F4"}
+	];
+
+
+
+	function loadFinished(){
+		titlebar = TitlebarBehavior( findChild( "titlebar"));
+		addEventListener( ACTION_EVENT, actionevent);
+		addEventListener( BROADCAST_EVENT, broadevent);
+
+		bgtask = BackgroundTask();
+		updateAccount();
+	}
+
+	function added(){
+		::rootview.addPostEventListener( APP_EVENT, rootevent);
+		::rootview.addPostEventListener( KEY_EVENT, rootevent);
+		::rootview.addPostEventListener( NOTIFY_EVENT, rootevent);
+		super.added();
+		newthread().start( showFirstMenu, this);
+	}
+
+	function showFirstMenu(){
+		sleep( 100);
+		//	home | project
+		local showhome = false;
+		if( showhome = ::workspace["showhome1"]){ workspace.showhome1 = false;  }	//	showhome1フラグ。ポータルアップデートしたり？
+		else showhome = ::workspace["showhome"];
+		setMainView( (showhome||!length( ::workspace["projlist"])) ? 0 : 1);	//	プロジェクトが一個もない場合もホーム表示
+	}
+	
+	//	
+	function rootevent( e){
+		if( e.consumed==1) return;	//	※ダイアログ等でmodalでイベントが吸われた場合も実行
+		switch( e.id){
+		case SCREEN_RESIZED:
+			break;
+		case ACTIVESTATE_CHANGED:
+			printf("ACTIVESTATE_CHANGED %S\n", e.keycode);
+			::rootview.broadcastEvent( {cmd="app_active", state=e.keycode});
+			break;
+		case QUIT_REQUESTED:
+			printf("QUIT_REQUESTED\n");
+			::saveWorkspace();
+			break;
+		case NOTIFY_ERROR:	//	表示するべきエラー
+		try{
+			e.consume();
+			Popups.showErrorTrace( e.actioncmd);
+			break;
+		}catch( ex){	//	ここでthrowしちゃうと無限ループしちゃう
+			printexception( ex);
+		}
+		case KEY_PRESSED:
+		{	//	portalではSKStudioのメニュー機能は無いので
+			if( e.consumed) break;	//	modalで実行しない
+			local modkey = toModifierKeyString( e.keycode, e.modifiers);
+			foreach( m in appmenulist){
+				if( m["modkey"] == modkey) return execAppMenu( m);
+			}
+			break;
+		}
+		}
+		// if( !e.consumed) editor?.rootevent( e);
+	}
+
+	function broadevent( e){
+		local bc = e["actioncmd"];
+		switch( bc["cmd"]){
+		case "account_changed":
+			updateAccount();
+			break;
+		}
+	}
+
+	function updateAccount(){
+		local a = ::account;
+		local g = findChild( "loging");
+		switch( a.status){
+		case ACCOUNT_VALID:
+		case ACCOUNT_UNAVAIL:
+			local colmap = { "free"=0x92FE26ff, "indie"=0xFFD24Dff, "pro"=0x99E5FFff};
+			g.anime( 1);
+			g.setValue( "license", "$T.license_" .. (a.license["id"]||"free"));
+			g.setValue( "ticket", a.ticket_d);
+			if( a.iconbb && a.iconbb.size >= 100) g.setValue( "proficon", skLoadImage( a.iconbb));
+			g.findChild( "col").setParam( SKViewPropertyID.BUFFERCOLOR, colmap[a.license["id"]]||0xff0000ff);
+			break;
+		default:
+			g.anime( 0);
+			break;
+		}
+	}
+
+	function actionevent( e){
+		switch( e.src["name"]){
+		case "menu0": case "menu1":
+			setMainView( e.src.name[4]-'0');
+			break;
+		case "loginbtn":
+			LoginDialog.run();
+			break;
+		case "accountbtn":
+			showAccountMenu( e);
+			break;
+		case "appmenu":
+			showAppMenu( e);
+			break;
+		}
+	}
+
+	function showAccountMenu( e){
+		local picon = #{google="\uf83a",discord="\uf838",github="\uf839"};
+		local menudata = [
+			{ id="mypage", lbl="$T.lbl_mypage", icon="\ue88a"},
+			"-",
+			{ id="logout", lbl="$T.lbl_logout", icon="\ue9ba"},
+			{ lbl=tmpl( T.tmpl_logined_v, {v=::account.uid}), icon=picon[::account.provider]||"", disable=true, }
+		];
+		switch( MenuPopup.run( menudata, e.src)["id"]){
+		case "mypage":
+			skOpenURL( tmpl( Account.pagemap.home, {token=::account.token}));
+			break;
+		case "logout":
+			if( Dialogs.confirm( {msg="$T.confirm_logout"})){
+				::account.logout();
+			}
+			break;
+		}
+	}
+
+	//	
+	function sideevent( e){
+		local cmd = e.actioncmd;
+		switch( e.id){
+		case ITEM_SELECTED:
+			changeSideView( cmd);
+			break;
+		}
+	}
+
+	//	
+	function setMainView( i){
+		for( local l = 0;l < 2;l ++){
+			local tab = titlebar.view.findChild( "menu"..l);
+			tab.setSelected( i == l);
+		}
+
+		local v;
+		switch( i){
+		case 0: v = ::loadSKView( "/ui/home.ui", RPGPortalHomeView); break;
+		case 1: v = ::loadSKView( "/ui/projects.ui", RPGPortalProjectView); break;
+		}
+		mainview?.removeFromParent();
+		mainview = v;
+		if( v){
+			local b = findChild( "main");
+			v.stretchSize( b.bnd.w, b.bnd.h, true);
+			b.addChild( v);
+		}
+	}
+
+	//	指定したメニューがこのエディターで現在使用可能か、
+	//	undo,redoなどの有効無効をチェックする。メニューの定義にenabled=editorMenuEnabledを指定したときのみ飛んでくる。
+	function isMenuEnabled( m){
+		return false;
+	}
+
+	function showAppMenu( e){
+		local m = MenuPopup.run( appmenulist, e.src);
+		execAppMenu( m);
+	}
+
+	function execAppMenu( m){
+		switch( m["id"]){
+		case "web":
+		{
+			skOpenURL( "https://rpg-cobo.com");
+			break;
+		}
+		case "console":
+		{
+			local b = Win32.isConsoleVisible();
+			Win32.setConsoleVisible( !b);
+			::workspace.showconsole <- !b;
+			break;
+		}
+		case "uiscale":
+		{
+			::rootview.setDisplayResolution( m.val*0.01);
+			::workspace.uiscale <- m.val;
+			::saveWorkspace();
+			break;
+		}
+		case "check":
+		{
+			mainCheck();
+			//	※ここでポータルのアップデートがあったらダイアログ出す！
+			break;
+		}
+		case "prefs":
+			PreferenceDialog.run();
+			break;
+		case "quit":
+			::rootview.quit = true;
+			suspend();
+			break;
+		}
+	}
+}
+
+
+//	走ってるときにRPGPortalViewの下部に"ダウンロードが進行中… nanka"と出る。
+//	大体時間がかかるのがダウンロードなので↑
+//	
+//	アプリ初回起動時に予めダウンロードしておきたいもの。プロジェクト生成とアップデートには必要。
+//	git : インストールされてれば不要。されてなければ46MB。
+//	asset : 80MBぐらいかな？一応毎回起動時にgit pullする。
+//	
+class BackgroundTask
+{
+	tasklist = null;
+	thread = null;
+
+	constructor(){
+		tasklist = [];
+	}
+
+	//	task : {id, lbl, func}
+	function addTask( task){
+		tasklist .. task;
+		if( !thread){
+			(thread=newthread( "bgtask")).start( runthread, this);
+		}
+	}
+
+	//	idのタスクが進行中かチェック。
+	function isRunning( id){
+		return !!tasklist.find( @( v) v.id==id);
+	}
+
+	//	id配列のタスクを待つ。待ってる間ダイアログを出してキャンセル可能。tasklistの入れ替え対応しても良いかも
+	function waitForTasks( ids){
+		local a = tasklist, fn = @() a.find( @( v) ids.contains( v.id));
+		if( fn()){
+			return Dialogs.showWaiting( "$T.dlg_waitdl", fn);	//	キャンセルされたらfalse
+		}
+		return true;
+	}
+
+	function runthread(){
+		local view = ::rootview.findChild( "bgtask");
+		view.action( "show");
+		local self = this;
+		local i = ptr( 0), n = ptr( length( tasklist));
+		while( length( tasklist)){
+			local task = tasklist[0];
+			view.bindValue( "tasklbl", @(){
+				n << Math.max( ~n, length( self.tasklist));
+				return sprintf( "$T.lbl_bgprogress(%d/%d) ... %S", Math.min( ~i+1, ~n), ~n, fget( task, "lbl"));
+			});
+			for( ;;){
+				try{
+					task.func( task);
+					break;
+				}catch( ex){
+					printexception( ex);
+					if( !Dialogs.confirm( {msg="$T.confirm_bgtask_err", icon="\ue001", yestxt="$T.lbl_retry" notxt="$T.lbl_ignoreerr"})){
+						break;
+					}
+				}
+			}
+			i << (~i+1);
+			delete tasklist[0];
+			suspend();
+		}
+		view.action( "hide");
+		thread = null;
+	}
+}
