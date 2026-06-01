@@ -96,7 +96,7 @@ class RPGPortalView extends SKLibView
 	appmenulist = [
 		{ id="web", lbl="$T.lbl_site_official", icon="\ue89e"}
 		"-",
-		{ id="check", lbl="$T.lbl_check_update", icon="\ue2e7", rlbl=@() rtf( "[i]"..(::workspace["portalver"] || {tag="", latest=""}).tag) },
+		{ id="check", lbl="$T.lbl_check_update", icon="\ue2e7", rlbl=@() rtf( "[i]"..(::workspace["portalver"] || {tag="", latest=""}).tag), disable=@() ::rpgportal.bgtask.isAnyRunning() },
 		"-",
 		{ id="console", lbl="$T.menu_view_console", icon="\ueb8e", modkey="^@"}
 		{ id="uiscale", lbl="$T.act_setting_ctxmenu_uiscale", icon="\ue8ff", submenu=@() ::uiscalelist.map( @( v)+{ ...v, checked = ::workspace["uiscale"]==v.val, })}
@@ -336,6 +336,10 @@ class BackgroundTask
 		if( !thread){
 			(thread=newthread( "bgtask")).start( runthread, this);
 		}
+	}
+
+	function isAnyRunning(){
+		return !!tasklist[0];
 	}
 
 	//	idのタスクが進行中かチェック。
