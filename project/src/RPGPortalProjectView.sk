@@ -187,7 +187,7 @@ class RPGPortalProjectView extends SKLibView
 			"-",
 			{ id="importdir", lbl="$T.lbl_importdir", icon="\ue2c8"},
 			{ id="importzip", lbl="$T.lbl_importzip", icon="\ueb2c"},
-			{ id="scan", lbl="$T.lbl_scan", icon="\ue51e"},
+			// { id="scan", lbl="$T.lbl_scan", icon="\ue51e"},
 		];
 		switch( MenuPopup.run( ctxmenu, e["src"])["id"]){
 		case "new":
@@ -225,6 +225,9 @@ class RPGPortalProjectView extends SKLibView
 			}
 			break;
 		}
+		case "importzip":
+			showImportBackup();
+			break;
 		}
 	}
 
@@ -412,6 +415,78 @@ class RPGPortalProjectView extends SKLibView
 			}
 		}
 	}
+
+	function showImportBackup(){
+		local d = FileDialog();
+		local docdir = ::workspace["projbasepath"] || skGetDocumentDir();
+		d.setTitle( T.lbl_selectimportzip);
+		d.setFilters( ["*.zip"]);
+		local dir = FileRef( docdir);
+		d.setFile( dir);
+		d.setMode( FILEDIALOG_OPEN);
+		d.show();
+		while( d.isShown()){
+			suspend();
+			// printf( "%d\n", skGetTime());
+			sleep( 100);
+		}
+		local p = d.getResult();
+		if( !p) return;
+		//
+		local zipf = FileRef( p);
+		local zip = ZipReader( zipf);
+		local bi = decodeJSON( zip.readFileEntry( ".backupinfo").data);
+		local setting = decodeJSON( zip.readFileEntry( "data/setting.json").data);
+		zip.close();
+		//	タスク化して待つ。
+		local tag = bi.tag;
+		if( !ProjectOp.hasTagCacheDir( tag)){
+			::rpgportal.bgtask.addTask({
+				id="tag", func=@(){ ProjectOp.cloneTagCache( tag); }
+			});
+			if( !::rpgportal.bgtask.waitForTasks( ["tag"])) return;	//	cancel
+		}
+		local dname = setting.projname, dpath = docdir, i = 1;
+		for( ;;i ++){
+			local dn = NewProjectDialog.nameToDir( dname);
+			dpath = `$docdir/$dn`;
+			local f = FileRef( dpath);
+			if( !f.exists() || (f.isDirectory() && !length( f.getList()))){
+				break;
+			}
+			dname = `$setting.projname-$i`;
+		}
+		local langlist = ::sakana.languagelist.map( @(v) ({ lbl=v.name, val=v.code, icon=v.icon, }));
+		local propdef = {
+			name = "$T.lbl_importzip", icon = "\uebbd",
+			width = 520,
+			props = [
+				{ pid="projname", lbl="$T.lbl_projname", type=STRING, cnt="cnt.ui", },
+				{ pid="projpath", lbl="$T.lbl_projpath", type=FILEPATH, cnt="cnt3.ui", },
+			],
+		}
+		local dst = PropertyEditPopup_OK.run( null, propdef, { projname=dname, projpath=dpath, projlang=setting.projlang, rpgver=bi});
+		if( dst){
+			local f = FileRef( dst.projpath);
+			if( f.exists() && (!f.isDirectory() || length( f.getList())>0)){
+				Popups.showInfo( "$T.pop_dirnotempty");
+			}
+			local newprojptr = ptr();
+			local thread = newthread(); thread.start( @(){
+				::reportErrorAction( @() newprojptr << ProjectOp.importBackup( zipf, dst));
+			}, this);
+			if( Dialogs.showWaiting( "$T.lbl_dupproj_run", @() thread.getState()==2)){
+				local newproj = ~newprojptr;
+				if( newproj){
+					::workspace.projlist .. newproj;
+					::saveWorkspace();
+					updateList();
+					Popups.showInfo( "$T.pop_projectcreated");
+				}
+			}
+		}
+	}
+	
 
 	function backupfilename(){
 		local d = Date( Date.currentTime() - Date.timezone());
@@ -608,7 +683,7 @@ class NewProjectDialog extends Dialog
 		setTemplate( tmpllist[0]);
 	}
 
-	function nameToDir( s){
+	static function nameToDir( s){
 		local ws = wstring( s);
 		local sb = StringBuffer();
 		foreach( v in ws) sb .. char( pathchrmap[v] || v);

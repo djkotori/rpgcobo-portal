@@ -378,6 +378,61 @@ class ProjectOp
 		return ret;
 	}
 
+	//	バックアップファイル(zip)からプロジェクトをインポート。
+	//	ツールをインストールして、restoreProjectBackup。
+	function importBackup( zipfile, dst){
+		local projdir = FileRef( dst.projpath);
+		local gi = { tag=dst.rpgver.tag, repo=dst.rpgver.repo };
+		projdir.deleteAll();
+		projdir.mkdirs();
+		//
+		//	まずはprojdirにコピー。この時.gitはコピーせず、.gitignoreとかは専用のをコピー。
+		cloneTagCache( gi.tag);
+		local srcdir = getTagCacheDir( gi.tag);
+		local p = popen_s();
+		local ret = p.open( "cmd.exe", ["/c", "robocopy", srcdir.nativepath, projdir.nativepath, "/MIR" "/XD", ".git", "/E"]);	//	※pipeすると動かない？？？
+		while( p.isrunning()) suspend();
+		//	
+		restoreProjectBackup( dst, zipfile);
+		//
+		//	プロジェクト名等を変更
+		local sf = FileRef( projdir, "project/data/setting.json");
+		local st = decodeJSON( sf.load());
+		st.projname <- st.title <- dst.projname;
+		local bb = encodeJSON( st, 0, ByteBuffer()); bb.pos = 0;
+		sf.save( bb);
+		//
+		//	rpgcobo.verを設定
+		local bb = encodeJSON( gi, 0, ByteBuffer()); bb.pos = 0;
+		local vf = FileRef( projdir, "rpgcobo.ver");
+		vf.save( bb);
+		//	
+		//	.sakana.wsも一応作っとくか
+		local ws = {
+			name = "RPG-Cobo :tool",
+			favorites = [],
+			tabs = [],
+			currentpath = "/",
+			lang = null,	//	合わせて良い
+			uiscale = 100,	//	合わせて良い
+			tabsync = true,
+		};
+		local bb = encodeJSON( ws, 0, ByteBuffer()); bb.pos = 0;
+		local wf = FileRef( projdir, ".sakana.ws");
+		wf.save( bb);
+		//
+		local ret = {
+			projname = dst.projname,
+			projpath = dst.projpath,
+			projlang = dst.projlang,
+			updated = string( Date.currentTime()),
+			gittag = gi.tag,
+			gitrepo = gi.repo,
+			status = 1,
+		};
+		return ret;
+	}
+
 	//	指定したパラメータでプロジェクトを作成する。
 	//	projpath, projname, projlang, tag, tmpl, asseturls
 	//	
@@ -418,7 +473,6 @@ class ProjectOp
 			favorites = [],
 			tabs = [],
 			currentpath = "/",
-			// currentside ="side_map",		//	ここら辺はtool側でコントロールしたほうが良いかも
 			lang = null,	//	合わせて良い
 			uiscale = 100,	//	合わせて良い
 			tabsync = true,

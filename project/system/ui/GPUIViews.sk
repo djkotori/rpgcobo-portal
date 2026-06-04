@@ -243,13 +243,14 @@ class GPUIButtonTarget extends GPUITarget
 		switch( e.id){
 		case MOUSE_PRESSED:
 			if( e.isMouseDown( BUTTON3_MASK)) break;	//	プッシュ型ボタンはホイールクリックを判断しない
-			if( e.isMouseDown( BUTTON2_MASK) && !enablerclick) break;
+			local rclk = e.isMouseDown( BUTTON2_MASK);
+			if( rclk && !enablerclick) break;
 			pressed = true;
 			::playSound( snd);
-			syncanime( MOUSE_PRESSED);
+			if( !rclk) syncanime( MOUSE_PRESSED);
 			view.postActionEvent( null, e.count, e.modifiers);		//	ここでActionEvent発火 右クリックかはmodifiersで見る
 			if( !isScrollable()) e.consume();
-			newthread().start( @(){
+			if( !rclk) newthread().start( @(){
 				syncanime( MOUSE_CLICKED);
 				if( entered) syncanime( MOUSE_ENTERED);
 			}, this);
@@ -2351,15 +2352,20 @@ class GPUITextEdit.TextEdit extends SKTextEditBase
 			gpuiedit.animefunc( FOCUS_GAINED);
 			if( gpuiedit.checkdefocus) setUpdateFunc( checkDefocus);
 			if( gpuiedit.revertmode){
-				preedittext = getText();		//	ESCやTABやマウスでフォーカスが移った時にこのテキストに戻る
+				preedittext = getText();		//	ESCでこのテキストに戻る
 				gpuiedit.posttext( TEXT_RESTART);	//	戻ったことを通知するためにTEXT_CHANGEDイベント発行。。。いいかな
 			}
 		}else{
+			//	※フォーカス移った時はキャンセルじゃなくて決定にしたほうがいいかも。ESCでキャンセルするのはユーザーの意図がはっきりしてるし。
 			gpuiedit.animefunc( gpuiedit._entered ? MOUSE_ENTERED : MOUSE_EXITED);
-			if( preedittext){
-				gpuiedit.setText( preedittext);
+			// if( preedittext){
+			// 	gpuiedit.setText( preedittext);
+			// 	preedittext = null;
+			// 	gpuiedit.postIDEvent( ACTION_CANCELED, null);
+			// }
+			if( preedittext && preedittext != getText()){
 				preedittext = null;
-				gpuiedit.postIDEvent( ACTION_CANCELED, null);
+				gpuiedit.postActionEvent( null);
 			}
 		}
 		super.focusStateChanged( b);
