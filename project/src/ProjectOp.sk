@@ -129,7 +129,8 @@ class ProjectOp
 
 	//	46MBのダウンロードする場合があるので数秒ぐらい待つ可能性あり。
 	function downloadGit(){
-		local r = ::exec( "./tools/git_get.ps1", [], true);
+		local salt = "%04x" % (skGetTime()&0xffff);
+		local r = ::exec( "./tools/git_get.ps1", [salt], true);
 		local ret = r.stdout.asText().trim();
 		local path = ret.substring( ret.lastIndexOf( "RESULT:")+7);
 		printf( "GIT EXE PATH = %S\n", path);
@@ -141,10 +142,7 @@ class ProjectOp
 		local cdir = FileRef( skGetCurrentDir());
 		local r = ::exec( _gitexe, ["config","--global","--add","safe.directory",cdir.nativepath]);
 		local s = r.stdout.asText();
-		printf( "git config safe.directory to current dir:\n%S\n", s);
-		local r = ::exec( _gitexe, ["config","--global","http.postBuffer","524288000"]);
-		local s = r.stdout.asText();
-		printf( "git config http.postBuffer:\n%S\n", s);
+		printf( "addSafeDirectory to current dir:\n%S\n", s);
 	}
 
 	//	git lfs install は念のため毎回やって良いみたい

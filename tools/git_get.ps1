@@ -1,6 +1,8 @@
 Using Module  .\gettool.psm1
 
-param()
+param(
+	[string]$SALT
+)
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -9,8 +11,8 @@ $ErrorActionPreference = "Stop"
 $GIT_DIR = Join-Path $env:LOCALAPPDATA "rpgcobo\tools\git"
 $GIT_URL = "https://github.com/git-for-windows/git/releases/download/v2.50.1.windows.1/MinGit-2.50.1-64-bit.zip"
 if( -not (Test-Path "$GIT_DIR")) {
-	$TMP_ZIP = Join-Path $env:TEMP "mingit_tmp.zip"
-	$TMP_DIR = Join-Path $env:TEMP "mingit_tmp"
+	$TMP_ZIP = Join-Path $env:TEMP "mingit_tmp$SALT.zip"
+	$TMP_DIR = Join-Path $env:TEMP "mingit_tmp$SALT"
 	Invoke-WebRequest $GIT_URL -OutFile $TMP_ZIP
 	if( Test-Path "$TMP_DIR"){
 		Remove-Item -Path $TMP_DIR -Recurse -Force
