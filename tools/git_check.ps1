@@ -6,7 +6,7 @@ param()
 $OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
 
-$gitpath = (&where.exe git.exe)
+$GIT_DIR = Join-Path $env:LOCALAPPDATA "rpgcobo\tools\git"
 
 if( $gitpath){
 	Write-Output "RESULT:$gitpath"

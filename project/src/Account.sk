@@ -292,8 +292,8 @@ class LoginDialog extends Dialog
 
 	function setDone( a){
 		local ic = a.getIcon();
-		local piconmap = AccountPopup.piconmap;
-		local colmap = AccountPopup.colmap;
+		local piconmap = piconmap;
+		local colmap = colmap;
 		local li = a["license"], lid = li.id;
 		//
 		view.bindValues({

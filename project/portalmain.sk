@@ -6,6 +6,8 @@ if( ::workspace.lang) ::lang <- Language( chooseLanguage( ::workspace.lang));	//
 {	//	ファイルへのログ開始。1日ごとにファイル名更新
 	FileRef( "log").mkdirs();
 	local d = Date(); changeStdOutFile( FileRef( "log/p%04d%02d%02d.log" % (d.tm_year+1900, d.tm_mon+1, d.tm_mday)));
+	//	
+	FileRef( skGetCacheDir().."/temp").mkdirs();
 }
 
 //	再起動時にはウィンドウは生成済み

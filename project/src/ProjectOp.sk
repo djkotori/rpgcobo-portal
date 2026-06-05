@@ -22,6 +22,7 @@ local gitenv = {
 }
 
 function exec( exe, args, out=false){
+	printf( "Process exec %S %S\n", exe["path"]||exe, encodeJSON( args));
 	local t0 = skGetTime();
 	local p = popen_s();
 	local ret = p.open( exe, args, 0x100);	//	パイプ
@@ -108,15 +109,17 @@ class ProjectOp
 
 	function setGitExe( f){
 		_gitexe = f;
+		addSafeDirectory();
 	}
 
 	function checkGit(){
-		local r = ::exec( "./tools/git_check.ps1", []);
+		local r = ::exec( "./tools/git_check.ps1", [], true);
 		local ret = r.stdout.asText().trim();
 		local path = ret.substring( ret.lastIndexOf( "RESULT:")+7);
 		if( length( path)){
 			printf( "GIT EXE PATH = %S\n", path);
 			_gitexe = FileRef( path);
+			addSafeDirectory();
 			return true;
 		}else{
 			printf( "GIT NOT FOUND.... \n");
@@ -126,11 +129,22 @@ class ProjectOp
 
 	//	46MBのダウンロードする場合があるので数秒ぐらい待つ可能性あり。
 	function downloadGit(){
-		local r = ::exec( "./tools/git_get.ps1", []);
+		local r = ::exec( "./tools/git_get.ps1", [], true);
 		local ret = r.stdout.asText().trim();
 		local path = ret.substring( ret.lastIndexOf( "RESULT:")+7);
 		printf( "GIT EXE PATH = %S\n", path);
 		_gitexe = FileRef( path);
+		addSafeDirectory();
+	}
+
+	function addSafeDirectory(){
+		local cdir = FileRef( skGetCurrentDir());
+		local r = ::exec( _gitexe, ["config","--global","--add","safe.directory",cdir.nativepath]);
+		local s = r.stdout.asText();
+		printf( "git config safe.directory to current dir:\n%S\n", s);
+		local r = ::exec( _gitexe, ["config","--global","http.postBuffer","524288000"]);
+		local s = r.stdout.asText();
+		printf( "git config http.postBuffer:\n%S\n", s);
 	}
 
 	//	git lfs install は念のため毎回やって良いみたい
@@ -149,7 +163,7 @@ class ProjectOp
 
 	//	
 	function getTempDir(){
-		local path = `tmp/${string( skGetTime(), 16)}`;
+		local path = `${skGetCacheDir()}/temp/${string( skGetTime(), 16)}`;
 		local dir = FileRef( path);
 		dir.mkdirs();
 		foreach( f in dir.getList()) f.deleteAll();	//	中身を消す
@@ -174,6 +188,18 @@ class ProjectOp
 		local dstdir = getTagCacheDir( tag);
 		return dstdir.isDirectory();
 	}
+
+
+	function tryMoveFile( src, dst, n=5){
+		printf( "tryMoveFile from %S to %S\n", src.path, dst.path);
+		for( local l = 0;l < n;l ++){
+			sleep( 50);
+			local r = src.moveTo( dst);
+			if( !r) return true;
+		}
+		printf( "FATAL: cannot move file(dir) from %S to %S\n", src.path, dst.path);
+		return false;
+	}
 	
 	//	特定のタグをキャッシュフォルダにクローンする。既にある場合は何もしない。
 	function cloneTagCache( tag){
@@ -189,7 +215,7 @@ class ProjectOp
 		//	safe clone 
 		local dirtmp = getTempDir();
 		local r = ::exec( gitexe, [...nocred,"clone","-b", tag, "--single-branch", repourl, dirtmp.path], true);
-		dirtmp.moveTo( dstdir);
+		tryMoveFile( dirtmp, dstdir); // dirtmp.moveTo( dstdir);
 		return r.exitcode==0;
 	}
 
@@ -215,7 +241,7 @@ class ProjectOp
 		local r = ::exec( gitexe, [...nocred,"describe","--tags","--abbrev=0"/*, "--exact-match"*/]);
 		local s = r.stdout.asText().trim();
 		printf( "getCurrentTag........ %S\n", s);
-		if( s.contains( "fatal")) return null;	//	tagが無いな
+		if( s.contains( "fatal")) return "p0.0.0";	//	tagが無いな。。。p0.0.0にしてアップデートさせる？
 		return s;
 	}
 
@@ -269,7 +295,7 @@ class ProjectOp
 				local dirtmp = getTempDir();
 				local a = url.split( ",");
 				local r = ::exec( gitexe, [...nocred, "clone", "-b", a[1], a[0], dirtmp.nativepath], true);
-				local ret = dirtmp.moveTo( dir);
+				tryMoveFile( dirtmp, dir); // dirtmp.moveTo( dir);
 			}
 		}
 	}
@@ -730,7 +756,7 @@ class ProjectOp
 		local projdir = FileRef( proj.projpath);
 		local fn = @( prgfunc){
 			local zip = ZipReader( zipfile);
-			local outdir = FileRef( projdir, "project"), tmpdir = FileRef( skGetCacheDir().."tmp/restore");
+			local outdir = FileRef( projdir, "project"), tmpdir = FileRef( skGetCacheDir().."/temp/restore");
 			if( tmpdir.exists()) tmpdir.deleteAll();
 			suspend();
 			tmpdir.mkdirs();
@@ -845,7 +871,7 @@ class ProjectOp
 		local projdir = FileRef( proj.projpath);
 		local fn = @( prgfunc){
 			local zip = ZipReader( zipfile);
-			local outdir = projdir, tmpdir = FileRef( skGetCacheDir().."tmp/restore");
+			local outdir = projdir, tmpdir = FileRef( skGetCacheDir().."/temp/restore");
 			if( tmpdir.exists()) tmpdir.deleteAll();
 			suspend();
 			tmpdir.mkdirs();
