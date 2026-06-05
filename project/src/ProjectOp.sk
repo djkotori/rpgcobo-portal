@@ -389,11 +389,12 @@ class ProjectOp
 		//	まずはprojdirにコピー。この時.gitはコピーせず、.gitignoreとかは専用のをコピー。
 		cloneTagCache( gi.tag);
 		local srcdir = getTagCacheDir( gi.tag);
-		local p = popen_s();
-		local ret = p.open( "cmd.exe", ["/c", "robocopy", srcdir.nativepath, projdir.nativepath, "/MIR" "/XD", ".git", "/E"]);	//	※pipeすると動かない？？？
-		while( p.isrunning()) suspend();
+		// local p = popen_s();
+		// local ret = p.open( "cmd.exe", ["/c", "robocopy", srcdir.nativepath, projdir.nativepath, "/MIR" "/XD", ".git", "/E"]);	//	※pipeすると動かない？？？⇒動いた？？？
+		// while( p.isrunning()) suspend();
+		local ret = ::exec( "cmd.exe", ["/c", "robocopy", srcdir.nativepath, projdir.nativepath, "/MIR" "/XD", ".git", "/E"], true);
 		//	
-		restoreProjectBackup( dst, zipfile);
+		Dialogs.progress( "$T.lbl_runrestore", restoreProjectBackup( dst, zipfile));
 		//
 		//	プロジェクト名等を変更
 		local sf = FileRef( projdir, "project/data/setting.json");
@@ -748,6 +749,7 @@ class ProjectOp
 			try{
 				foreach( dn in ["data","resource"]){
 					local d0 = FileRef( outdir, dn), d1 = FileRef( tmpdir, dn);
+					if( !d0.exists()) continue;
 					trymove( d0, d1);
 					mvlist .. (d0,d1);
 				}
