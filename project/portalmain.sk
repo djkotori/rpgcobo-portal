@@ -46,6 +46,17 @@ if( !length( workspace["asseturls"])) workspace.asseturls <- [ProjectOp.env.repo
 //	gitをダウンロード。インストールされている場合はやらない
 local gitlblptr = ptr( "$T.bgtask_checkgit");
 
+local checkLFSWorking(){
+	//	gitLFSInstallをチェックしてlfsあるかチェック！
+	local b = ProjectOp.gitLFSInstall();
+	if( !b){
+		Dialogs.notice({
+			icon="\ue000",
+			msg=rtf("[D][b]Git LFS が破損しています。この問題はアンチウィルスソフトが引き起こしている可能性があります。[O]\n問題の改善のために現在新しいインストーラーを準備していますので、今しばらくお待ちください。"),
+		});
+	}
+}
+
 rpgportal.bgtask.addTask({
 	id="git", func=@(){
 		local gitpath = ::workspace["gitpath"];
@@ -53,6 +64,7 @@ rpgportal.bgtask.addTask({
 			local f = FileRef( gitpath);
 			if( f.exists()){
 				ProjectOp.setGitExe( f);
+				checkLFSWorking();
 				return;
 			}
 		}
@@ -62,6 +74,7 @@ rpgportal.bgtask.addTask({
 		}
 		::workspace.gitpath <- ProjectOp.gitExe().path;
 		::saveWorkspace();
+		checkLFSWorking();
 	},
 	lbl=@() ~gitlblptr,
 });

@@ -151,8 +151,10 @@ class ProjectOp
 			local r = ::exec( _gitexe, ["lfs","install"]);
 			local s = r.stdout.asText();
 			printf( "gitLFSInstall:\n%S\n", s);
+			if( r.exitcode != 0) return false;
 			lfsinstalled = true;
 		}
+		return true;
 	}
 
 	function gitExe(){
@@ -193,7 +195,7 @@ class ProjectOp
 		for( local l = 0;l < n;l ++){
 			sleep( 50);
 			local r = src.moveTo( dst);
-			if( !r) return true;
+			if( r) return true;
 		}
 		printf( "FATAL: cannot move file(dir) from %S to %S\n", src.path, dst.path);
 		return false;

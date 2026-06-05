@@ -20,7 +20,7 @@ if( -not (Test-Path "$GIT_DIR")) {
 	Expand-Archive -Path $TMP_ZIP -DestinationPath $TMP_DIR
 	$TOOLS_DIR = (Join-Path $env:LOCALAPPDATA "rpgcobo\tools")
 	if( -not (Test-Path "$TOOLS_DIR")){
-		mkdir (Join-Path "$TOOLS_DIR")
+		mkdir ("$TOOLS_DIR")
 	}
 	Move-Item -Path $TMP_DIR -Destination $GIT_DIR
 }
