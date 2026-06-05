@@ -1,6 +1,8 @@
 # rpgcobo-portal
 
-![Logo Image](rpgcobo-logo.png)
+![Logo Image](header.jpg)
+
+[⇒ Japanese](README.ja.md)
 
 This is a repository that manages RPG-Cobo's **project management app (portal app)**.  
 It functions as a launcher that allows you to create, manage, and launch projects all at once.
@@ -27,8 +29,7 @@ This is an **entrance app** for starting RPG production. It has the following fu
 You can download the latest stable version of **Portal App Installer** from the following page:
 
 ```
-(Coming soon)
-👉 https://rpg-cobo.com/download （Windows版）
+👉 https://rpg-cobo.com/download （For Windows）
 ```
 
 After installation, you can use RPG-Cobo by launching the app.
