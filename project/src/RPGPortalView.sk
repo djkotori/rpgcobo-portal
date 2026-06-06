@@ -325,6 +325,7 @@ class BackgroundTask
 {
 	tasklist = null;
 	thread = null;
+	resetid = 1;
 
 	constructor(){
 		tasklist = [];
@@ -348,8 +349,13 @@ class BackgroundTask
 	}
 
 	//	id配列のタスクを待つ。待ってる間ダイアログを出してキャンセル可能。tasklistの入れ替え対応しても良いかも
+	//	タスク時にリセットがかかる(=resetidが変化する)と続行不能のキャンセルとなる。
 	function waitForTasks( ids){
-		local a = tasklist, fn = @() a.find( @( v) ids.contains( v.id));
+		local rid = resetid, self = this;
+		local a = tasklist, fn(){
+			if( rid != self.resetid) throw Exception( "BackGround Task caused an fatal error!");
+			return a.find( @( v) ids.contains( v.id));
+		}
 		if( fn()){
 			return Dialogs.showWaiting( "$T.dlg_waitdl", fn);	//	キャンセルされたらfalse
 		}
@@ -372,7 +378,15 @@ class BackgroundTask
 					task.func( task);
 					break;
 				}catch( ex){
+					printf( "BackgroundTask error! message=%S\n", ex.message);
 					printexception( ex);
+					suspend();	//	showWaitingと表示が前後しちゃう！どーしたもんか
+					suspend();
+					if( ex.message?.startsWith( "bgtask_fatal")){	//	メッセージで判断？？？
+						Dialogs.notice( {msg="$T."..ex.message, icon="\ue000"});
+						++resetid;
+						break;
+					}
 					if( !Dialogs.confirm( {msg="$T.confirm_bgtask_err", icon="\ue001", yestxt="$T.lbl_retry" notxt="$T.lbl_ignoreerr"})){
 						break;
 					}

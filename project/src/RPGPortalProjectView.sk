@@ -748,8 +748,25 @@ class NewProjectDialog extends Dialog
 			::rpgportal.bgtask.addTask({
 				id="tag", func=@(){ ProjectOp.cloneTagCache( tag); }
 			});
-			if( !::rpgportal.bgtask.waitForTasks( ["tag"])) return;	//	cancel
+		}else{	//	ツールのリポジトリをチェック。
+			::rpgportal.bgtask.addTask({
+				id="tag", lbl="Validating Tool Repository", func=@(){
+					local tagdir = ProjectOp.getTagCacheDir( tag);
+					if( !ProjectOp.validateRepository( tagdir)){
+						throw Exception( "bgtask_fatal_tool_invalid");
+					}
+				}
+			});
 		}
+		//	テンプレートのアセットリポジトリをチェック。
+		::rpgportal.bgtask.addTask({
+			id="asset", lbl="Validating Asset Repository", func=@(){
+				if( !ProjectOp.validateAssetURL( t.tmpl.repourl)){
+					throw Exception( "bgtask_fatal_asset_invalid");
+				}
+			}
+		});
+		if( !::rpgportal.bgtask.waitForTasks( ["tag","asset"])) return;	//	cancel
 		//	実行！
 		local thread = newthread(); thread.start( ProjectOp.createProject, ProjectOp, t);
 		if( Dialogs.showWaiting( "$T.lbl_newproj_run", @() thread.getState()==2)){

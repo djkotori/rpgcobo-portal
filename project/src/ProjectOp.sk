@@ -108,6 +108,7 @@ class ProjectOp
 	lfsinstalled = false;	//	git lfs installしたか。プロセス内でキャッシュすればいいかな？
 
 	function setGitExe( f){
+		printf( "SET EXISTING GIT EXE PATH = %S\n", f.path);
 		_gitexe = f;
 		addSafeDirectory();
 	}
@@ -262,14 +263,35 @@ class ProjectOp
 			if( !url.startsWith( "http")) continue;
 			local dir = getAssetDir( url);
 			if( !dir.isDirectory()) return true;	//	未ダウンロード
+			//
+			local tf = FileRef( dir, "rpgcobo_templates.json");
+			if( !tf.exists()) return true;			//	必要なファイルが無い。壊れている可能性
+			//
 			local r = ::exec( "cmd.exe", ["/c", 
-				"cd", dir.nativepath, "&", 
+				"cd", "/d", dir.nativepath, "&", 
 				gitexe.nativepath, ...nocred, "remote", "show", "origin",
 			], true);
+			if( r.exitcode != 0) return true;		//	gitコマンドの実行時にエラー
 			local s = r.stdout.asText();
 			if( s.contains( "local out of date")) return true;	//	リモートに更新あり
 		}
 		return false;
+	}
+
+	//	createProject時などでgitが正しく配置されているかをチェックする。
+	//	urlにはファイルパスも入ってくるがその場合はその場合でチェック出来るように
+	function validateRepository( dir){
+		local gitexe = gitExe();
+		local r = ::exec( "./tools/validate_repo.ps1", [gitexe.nativepath, dir.nativepath], true);
+		return r.exitcode == 0;
+	}
+
+	//	createProject時などでgitが正しく配置されているかをチェックする。
+	//	urlにはファイルパスも入ってくるがその場合はその場合でチェック出来るように
+	function validateAssetURL( url){
+		if( !url.startsWith( "http")) return true;
+		local dir = getAssetDir( url);
+		return validateRepository( dir);
 	}
 	
 	//	登録されたすべてのアセットリポジトリを最新の状態にする。
@@ -283,7 +305,7 @@ class ProjectOp
 			local dir = getAssetDir( url);
 			if( dir.isDirectory()){	//	既にフォルダが存在する場合はgit pull。※壊れてるかもしれない！要チェック
 				local r = ::exec( "cmd.exe", ["/c", 
-					"cd", dir.nativepath, "&", 
+					"cd", "/d", dir.nativepath, "&", 
 					gitexe.nativepath, ...nocred, "fetch", "origin", "&",
 					gitexe.nativepath, ...nocred, "reset", "--hard", "&",
 					gitexe.nativepath, ...nocred, "pull",

@@ -59,6 +59,16 @@ local checkLFSWorking(){
 
 rpgportal.bgtask.addTask({
 	id="git", func=@(){
+		local git2path = skGetCacheDir() .. "/tools/git_po2540/cmd/git.exe";
+		{
+			local f = FileRef( git2path);
+			printf( "git2 path = %S, exists? = %S\n", git2path, f.exists());
+			if( f.exists()){
+				ProjectOp.setGitExe( f);
+				checkLFSWorking();
+				return;
+			}
+		}
 		local gitpath = ::workspace["gitpath"];
 		if( gitpath){
 			local f = FileRef( gitpath);

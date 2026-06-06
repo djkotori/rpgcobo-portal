@@ -166,7 +166,13 @@ class Dialogs
 			for( ;;){
 				suspend();
 				if( dlg.inclose && dlg.view.getRoot() != ::rootview) return;
-				if( !cont()){ dlg.ret = true; dlg.close(); break; }
+				try{
+					if( !cont()){ dlg.ret = true; dlg.close(); break; }
+				}catch( ex){
+					printf( "showWaiting caught interrupt close!!!\n");
+					printexception( ex);
+					dlg.ret = 0; dlg.close();
+				}
 			}
 		}, this);
 		dlg.show();
