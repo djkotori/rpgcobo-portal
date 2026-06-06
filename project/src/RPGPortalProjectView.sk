@@ -656,6 +656,7 @@ class NewProjectDialog extends Dialog
 	tmpllist = null;				//	テンプレート一覧
 	docdir = null;
 	pathlinked = true;				//	パスがプロジェクト名とリンクしてる。patheditに直接入力すると外れる
+	pathexists = false;
 
 	static function run(){
 		local dlg = this( "/ui/newprojdialog.ui");
@@ -692,6 +693,20 @@ class NewProjectDialog extends Dialog
 
 	function updatePath(){
 		pathedit.setText( docdir .. "/" .. nameToDir( nameedit.getText()));
+		updatePathExists();
+	}
+
+	function updatePathExists(){
+		local dir = FileRef( pathedit.getText());
+		local ic = view.findChild( "pathchk");
+		pathexists = dir.exists() && (!dir.isDirectory() || dir.getList()[0]);
+		if( pathexists){
+			ic.setText( "\ue000");
+			ic.setColor( 0xff6600ff);
+		}else{
+			ic.setText( "\ue86c");
+			ic.setColor( 0x8FBE05ff);
+		}
 	}
 
 	function setTemplate( t){
@@ -725,6 +740,9 @@ class NewProjectDialog extends Dialog
 			}
 			break;
 		case "btn_create":
+			if( pathexists){
+				return Popups.showInfo( "$T.pop_dirnotempty");
+			}
 			doCreateProject();
 			break;
 		}
@@ -791,5 +809,6 @@ class NewProjectDialog extends Dialog
 	}
 
 	function pathevent( e){
+		updatePathExists();
 	}
 }
