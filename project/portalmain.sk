@@ -63,7 +63,7 @@ local findGit( path){
 	if( f.exists()){
 		ProjectOp.setGitExe( f);
 		checkLFSWorking();
-		return;
+		return f;
 	}
 }
 
