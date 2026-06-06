@@ -57,34 +57,25 @@ local checkLFSWorking(){
 	}
 }
 
+local findGit( path){
+	local f = FileRef( path);
+	printf( "findGit %S : %S\n", f.path, f.exists());
+	if( f.exists()){
+		ProjectOp.setGitExe( f);
+		checkLFSWorking();
+		return;
+	}
+}
+
 rpgportal.bgtask.addTask({
 	id="git", func=@(){
-		local git2path = skGetCacheDir() .. "/tools/git_po2540/cmd/git.exe";
-		{
-			local f = FileRef( git2path);
-			printf( "git2 path = %S, exists? = %S\n", git2path, f.exists());
-			if( f.exists()){
-				ProjectOp.setGitExe( f);
-				checkLFSWorking();
-				return;
-			}
-		}
-		local gitpath = ::workspace["gitpath"];
-		if( gitpath){
-			local f = FileRef( gitpath);
-			if( f.exists()){
-				ProjectOp.setGitExe( f);
-				checkLFSWorking();
-				return;
-			}
-		}
-		if( !ProjectOp.checkGit()){
+		local gitf = findGit( "C:/Program Files/Git/cmd/git.exe");	//	公式Gitがインストールされていたら一番安全。デフォルトのフォルダのみ検索
+		if( !gitf) gitf = findGit( skGetCacheDir() .. "/tools/git_po2540/cmd/git.exe");	//	インストーラーから入れられたPortableGit
+		if( !gitf && !ProjectOp.checkGit()){
 			gitlblptr << "$T.bgtask_dlgit"
 			ProjectOp.downloadGit();
 		}
-		::workspace.gitpath <- ProjectOp.gitExe().path;
-		::saveWorkspace();
-		checkLFSWorking();
+		checkLFSWorking();	//	git-lfsが使えるかチェック。mingitではユーザーによってはなぜかgit-lfsが使用不能。
 	},
 	lbl=@() ~gitlblptr,
 });
