@@ -292,7 +292,7 @@ class RPGPortalProjectView extends SKLibView
 		case "rename":
 			local iv = projlist.getItemView( proj);
 			local lbl = iv.findChild( "projname");
-			local n = Popups.showRename( lbl);
+			local n = Popups.showRename( lbl, {lbl=proj.projname});
 			if( n && n <> proj.projname){
 				ProjectOp.renameProject( projdir, n);
 				proj.projname = n;
