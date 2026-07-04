@@ -32,7 +32,13 @@ class RPGPortalHomeView extends SKLibView
 		local chk = findChild( "showhome");
 		chk.setSelected( !!::workspace["showhome"]);
 
+		tablist.addEventListener( ACTION_EVENT, tabevent);
 		addEventListener( ACTION_EVENT, actionevent);
+	}
+
+	function tabevent( e){
+		e.consume();
+		switchTab( e.src.parent);
 	}
 
 	function actionevent( e){
@@ -44,6 +50,15 @@ class RPGPortalHomeView extends SKLibView
 		case "goprojbtn":
 			::rpgportal.setMainView( 1);
 			break;
+		case "incbtn":
+		case "decbtn":
+		{
+			local d = e.src["name"] == "incbtn" ? 1 : -1;
+			local i = tablist.rows.findi( @( v) v.findChild( "tabbtn").isSelected());
+			local ni = Math.mod2( i + d, 0, length( tablist.rows)) | 0;
+			switchTab( tablist.rows[ni]);
+			break;
+		}
 		}
 	}
 
@@ -195,11 +210,30 @@ class SyncMoviePlayer
 class UIHomeContent
 {
 	view = null;			//	.uiがそのままviewに
+	meta = null;			//	JSONの内容
 
 	function loadContent( t){
 		local r = downloadMedia( t.media);
 		view = loadSKView( r);
 		view.action( "show");
+		view.addEventListener( ACTION_EVENT, actionevent);
+		try{
+			local s = view.viewdata.getStatic( SKViewPropertyID.METADATA);
+			if( length( s)){
+				meta = decodeJSON( s);
+			}
+		}catch( ex){
+			printexception( ex);
+		}
+	}
+
+	function actionevent( e){
+		local n = e.src["name"];
+		local link = meta[n];
+		if( link){
+			skOpenURL( link);
+			e.consume();
+		}
 	}
 }
 

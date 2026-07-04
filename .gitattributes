@@ -27,7 +27,7 @@
 # *.mp4 filter=lfs diff=lfs merge=lfs -text
 
 #rpg-cobo
-*.ui filter=lfs diff=lfs merge=lfs -text
-*.mdl filter=lfs diff=lfs merge=lfs -text
-*.mot filter=lfs diff=lfs merge=lfs -text
-*.bw filter=lfs diff=lfs merge=lfs -text
+# *.ui filter=lfs diff=lfs merge=lfs -text
+# *.mdl filter=lfs diff=lfs merge=lfs -text
+# *.mot filter=lfs diff=lfs merge=lfs -text
+# *.bw filter=lfs diff=lfs merge=lfs -text
