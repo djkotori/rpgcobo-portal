@@ -211,7 +211,7 @@ enum ModifiersMask
 	META_MASK = 4
 	ALT_MASK = 8
 	ALT_GRAPH_MASK = 16
-	BUTTPN0_MASK = 32		//	TouchPad down
+	BUTTON0_MASK = 32		//	TouchPad down
 	BUTTON1_MASK = 64
 	BUTTON2_MASK = 128
 	BUTTON3_MASK = 256
@@ -279,6 +279,7 @@ const SCREEN_RESIZED = 4
 const SCREEN_REPAINT = 5
 const SIGNAL_CAUGHT = 6
 const ACTIVESTATE_CHANGED = 7
+const EXECUTE = 8
 const MOUSE_CLICKED = 100
 const MOUSE_PRESSED = 101
 const MOUSE_RELEASED = 102
@@ -356,6 +357,10 @@ const GPUI_SELECTED = 1503
 const GPUI_DESELECTED = 1504
 const GPUI_GAMEPAD_CHANGED = 1510
 const GPUI_GAMEPAD_NOTICE = 1511
+const EXEC_INVOKE = 1600
+const EXEC_NOTIFY = 1601
+const EXEC_RESPONSE = 1602
+const EXEC_MCP = 1603
 
 const APP_EVENT = 0
 const MOUSE_EVENT = 1
@@ -374,6 +379,7 @@ const IAP_EVENT = 11
 const NOTIFY_EVENT = 13
 const BROADCAST_EVENT = 14
 const GPUI_EVENT = 15
+const EXEC_EVENT = 16
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -751,6 +757,8 @@ enum MoveScreenFlags
 	MOVESCREEN_MAXIMIZE = 16,
 	MOVESCREEN_RESTORE = 32,
 	MOVESCREEN_HIDE = 40,
+	MOVESCREEN_FRONT = 48,
+	MOVESCREEN_MAXRESO = 56,
 }
 
 enum JsonEncodingBit
