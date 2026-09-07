@@ -77,6 +77,10 @@ class TagVersion
 		release = null;
 	}
 
+	function releaseScore(){
+		return releasescore[release] || 0;
+	}
+
 	function setTag( tag){
 		this.tag = tag;
 		clear();
@@ -630,6 +634,7 @@ class ProjectOp
 		local srcdir = getTagCacheDir( newtag);
 		local mergemap = {};		//	path:ByteBuffer|FileRef。最後に書き込む。変更があったもののみ。
 		local gitexe = gitExe();
+		local ca = (0,);
 		local merge( path){
 			local src = FileRef( srcdir, path);
 			if( src.name[0] == '.') return;			//	.xxxは全部無視！
@@ -638,6 +643,7 @@ class ProjectOp
 					merge( path .. "/" .. f.name);
 				}
 			}else{
+				if( !(++ca[0]&15)) suspend();
 				local base = FileRef( basedir, path);
 				local dst = FileRef( projdir, path);
 				if( base.exists() && dst.exists()){
@@ -657,6 +663,7 @@ class ProjectOp
 						}else{
 							mergemap[path] <- {src=r.stdout,type="M"};	//	マージ
 						}
+						ca[0] = 0;
 					}
 				}else
 				if( !base.exists() && dst.exists()){	//	足されたファイルが既に存在しちゃってる。マージはできなそう
@@ -693,12 +700,13 @@ class ProjectOp
 	}
 
 	//	マージの結果を反映する。rpgcobo.verも更新する。
-	function applyMergeResult( projdir, tag, mergemap){
-		local c = 0;
+	function applyMergeResult( projdir, tag, mergemap, progfunc){
+		local c = 0, num = length( mergemap);
 		foreach( i, v in mergemap){
+			progfunc( c * 1.0 / num, "%d / %d", c, num);
 			local dst = FileRef( projdir, i);
 			local dstdir = FileRef( dst, "..");
-			if( !dstdir.exists) dstdir.mkdirs();
+			if( !dstdir.exists()) dstdir.mkdirs();
 			local src = v.src;
 			if( src instanceof FileRef){
 				src.copyTo( dst);	//	SHFileOperationでやってるせいかおっそい。。。
@@ -855,7 +863,7 @@ class ProjectOp
 		local visitfile = visitfile;	//	thisが変わる
 		//
 		local fn = @( prgfunc){
-			local excludes = { "backup"=1, "log"=1, "tmp"=1, }
+			local excludes = { "backup"=1, "log"=1, "tmp"=1, "MagicaVoxel"=1 }	//	MagicaVoxelがvoxをジャンクションしてる！
 			local t0 = skGetTime();
 			//	zipするファイルを集める
 			local ziplist = [];

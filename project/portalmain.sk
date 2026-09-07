@@ -67,18 +67,20 @@ local findGit( path){
 	}
 }
 
-rpgportal.bgtask.addTask({
-	id="git", func=@(){
-		local gitf = findGit( "C:/Program Files/Git/cmd/git.exe");	//	公式Gitがインストールされていたら一番安全。デフォルトのフォルダのみ検索
-		if( !gitf) gitf = findGit( skGetCacheDir() .. "/tools/git_po2540/cmd/git.exe");	//	インストーラーから入れられたPortableGit
-		if( !gitf && !ProjectOp.checkGit()){
-			gitlblptr << "$T.bgtask_dlgit"
-			ProjectOp.downloadGit();
-		}
-		checkLFSWorking();	//	git-lfsが使えるかチェック。mingitではユーザーによってはなぜかgit-lfsが使用不能。
-	},
-	lbl=@() ~gitlblptr,
-});
+{
+	rpgportal.bgtask.addTask({
+		id="git", func=@(){
+			local gitf = findGit( "C:/Program Files/Git/cmd/git.exe");	//	公式Gitがインストールされていたら一番安全。デフォルトのフォルダのみ検索
+			if( !gitf) gitf = findGit( skGetCacheDir() .. "/tools/git_po2540/cmd/git.exe");	//	インストーラーから入れられたPortableGit
+			if( !gitf && !ProjectOp.checkGit()){
+				gitlblptr << "$T.bgtask_dlgit"
+				ProjectOp.downloadGit();
+			}
+			checkLFSWorking();	//	git-lfsが使えるかチェック。mingitではユーザーによってはなぜかgit-lfsが使用不能。
+		},
+		lbl=@() ~gitlblptr,
+	});
+}
 
 function mainCheck(){
 	//	最新版のツールを確認。無かったらダウンロード
@@ -86,8 +88,12 @@ function mainCheck(){
 
 	rpgportal.bgtask.addTask({
 		id="tool", func=@(){
-			::workspace.tooltags <- ProjectOp.getReleaseList( ProjectOp.env.repo_tool);
-			local tag = ::workspace.tooltags[0]["tag"];
+			local tooltags = ProjectOp.getReleaseList( ProjectOp.env.repo_tool);
+			if( !::workspace["update_nightly"]){
+				tooltags = tooltags.filter( @( v) TagVersion( v["tag"]).releaseScore() >= 40);	//	beta以上
+			}
+			::workspace.tooltags <- tooltags;
+			local tag = tooltags[0]["tag"];
 			if( tag && !ProjectOp.hasTagCacheDir( tag)){
 				toollblptr << ("$T.bgtask_dltool(%S)" % tag);
 				ProjectOp.cloneTagCache( tag);
@@ -142,7 +148,11 @@ function mainCheck(){
 	local t = Date.currentTime();
 	local lastchk = long( ::workspace["lastchk"]);
 	if( !::arguments.contains( "-nocheck")){
-		mainCheck();
+		printf( "Autocheck for updates... now=%S last=%S dt=%S\n", t, lastchk, t-lastchk);
+		//	自動チェックの条件を確認
+		if( ::workspace["autochk"] && int( t-lastchk) > ::workspace.autochk){
+			mainCheck();
+		}
 	}
 }
 

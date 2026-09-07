@@ -37,7 +37,9 @@ class RPGPortalProjectView extends SKLibView
 			local licon = ::sakana.languagelist.find( @( a) a.code==i.projlang).icon;
 			v.setValue( "projname", "%S %S" % (licon, i.projname));
 			v.setValue( "projpath", i.status>0 ? i.projpath : rtf( "[#f00]"..i.projpath));
-			v.setValue( "gittag", i.gittag);
+			local newtag = ::workspace.tooltags[0]["tag"]||null;
+			local rts = (newtag==i.gittag ? "[#bff]" : "[#ccc]");
+			v.setValue( "gittag",  rtf( rts..i.gittag));
 			local d = Date( long( i.updated));
 			local dstr = sprintf( "%04d/%02d/%02d %02d:%02d", d.tm_year+1900, d.tm_mon+1, d.tm_mday, d.tm_hour, d.tm_min);
 			v.setValue( "updated", dstr);
@@ -246,6 +248,7 @@ class RPGPortalProjectView extends SKLibView
 		local newtag = ::workspace.tooltags[0]["tag"]||null, basetag = proj["gittag"]||null;
 		local vup = newtag==basetag ? null : newtag;
 		local projdir = FileRef( proj.projpath);
+		local exists = projdir.exists();
 		local backupmenu = @(){
 			local fullbk = ProjectOp.getFullBackupFile( projdir);
 			return [
@@ -256,18 +259,18 @@ class RPGPortalProjectView extends SKLibView
 			];
 		};
 		local ctxmenu = [
-			{ id="open", lbl="$T.lbl_open", icon="\ue2c8"},
-			{ id="opendir", lbl="$T.filetabs_ctxmenu_explor", icon="\ue89e"},
+			{ id="open", lbl="$T.lbl_open", icon="\ue2c8", disable=!exists},
+			{ id="opendir", lbl="$T.filetabs_ctxmenu_explor", icon="\ue89e", disable=!exists},
 			"-",
-			{ id="rename", lbl="$T.lbl_rename", icon="\ue3c9", xopen=1},
-			{ id="duplicate", lbl="$T.lbl_dupproj", icon="\uebbd", xopen=1},
-			{ lbl="$T.lbl_backupop", icon="\ue623", submenu=backupmenu},
+			{ id="rename", lbl="$T.lbl_rename", icon="\ue3c9", xopen=1, disable=!exists},
+			{ id="duplicate", lbl="$T.lbl_dupproj", icon="\uebbd", xopen=1, disable=!exists},
+			{ lbl="$T.lbl_backupop", icon="\ue623", submenu=backupmenu, disable=!exists},
 			"-",
 			{ id="remove", lbl="$T.lbl_listremove", icon="\ue872"},
 			//	gittabの無いプロジェクト(gitから直接pullしたやつとか)はメニュー非表示
 			...(proj.gittag && [
 				"-",
-				{ id="upgrade", lbl=(vup?tmpl( T.tmpl_verup_tool, {v=vup}):"$T.lbl_latestver"), icon=vup?"\ue863":"\ue5ca", disable=!vup, xopen=1},
+				{ id="upgrade", lbl=(vup?tmpl( T.tmpl_verup_tool, {v=vup}):"$T.lbl_latestver"), icon=vup?"\ue863":"\ue5ca", disable=!vup, xopen=1, disable=!exists},
 			]),
 		];
 		local m = MenuPopup.run( ctxmenu);
@@ -356,11 +359,16 @@ class RPGPortalProjectView extends SKLibView
 			}
 			//	バージョンアップ
 			// Table.filter( @( v, i) v.type=="C");	Table.map( @( v, i) {i=i,v=v});
+			/*
 			local mergeptr = ptr();
 			newthread().start( @(){ 
 				mergeptr << ProjectOp.applyMergeResult( projdir, newtag, mergemap);
 			}, this);
 			Dialogs.showWaiting( "$T.lbl_upgrade_inprogress", @() ~mergeptr==null );	//	取得待ちダイアログ
+			*/
+			local ret = Dialogs.progress( "$T.lbl_upgrade_inprogress", @( progfunc){
+				ProjectOp.applyMergeResult( projdir, newtag, mergemap, progfunc);
+			});
 			//	rpgcobo.verを付けなおす
 			local gi = { repo=ProjectOp.env.repo_tool, tag=newtag };
 			local bb = encodeJSON( gi, 0, ByteBuffer()); bb.pos = 0;
