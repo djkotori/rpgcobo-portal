@@ -129,6 +129,9 @@ function mainCheck(){
 		id="portal", func=@(){
 			local curtag = ProjectOp.getCurrentTag( "") || "";
 			local portaltags = ProjectOp.getReleaseList( ProjectOp.env["repo_portal"]);	//	ポータルのtag取得はリポジトリ指定不要
+			if( !::workspace["update_nightly"]){
+				portaltags = portaltags.filter( @( v) TagVersion( v["tag"]).releaseScore() >= 40);	//	beta以上
+			}
 			local latesttag = portaltags[0]["tag"] || "";
 			local t = ::workspace.portalver <- { tag = curtag, latest = latesttag, };
 			//	ここで保存
