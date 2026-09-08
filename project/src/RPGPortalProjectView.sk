@@ -369,6 +369,12 @@ class RPGPortalProjectView extends SKLibView
 			local ret = Dialogs.progress( "$T.lbl_upgrade_inprogress", @( progfunc){
 				ProjectOp.applyMergeResult( projdir, newtag, mergemap, progfunc);
 			});
+			if( ret instanceof Exception){
+				suspend();
+				// Popups.showError( tmpl( T.tmpl_error_popup, {v=ret.message}));
+				::rootview.postErrorEvent( {type="showUpgradeProject", error=ret, msg = tmpl( T.tmpl_error_popup, {v=ret.message}) });
+				return;
+			}
 			//	rpgcobo.verを付けなおす
 			local gi = { repo=ProjectOp.env.repo_tool, tag=newtag };
 			local bb = encodeJSON( gi, 0, ByteBuffer()); bb.pos = 0;
@@ -566,7 +572,11 @@ class RPGPortalProjectView extends SKLibView
 		if( !sel) return;
 		//	
 		local ret = Dialogs.progress( "$T.lbl_runrestore", ProjectOp.restoreProjectBackup( proj, sel.file));
-		if( ret){	//	キャンセルされる場合もあり、でもされたら壊れるな
+		if( ret instanceof Exception){
+			suspend();
+			// Popups.showError( tmpl( T.tmpl_error_popup, {v=ret.message}));
+			::rootview.postErrorEvent( {type="showUpgradeProject", error=ret, msg = tmpl( T.tmpl_error_popup, {v=ret.message}) });
+		} else {
 			Popups.showInfo( "$T.lbl_restore_done");
 		}
 	}
