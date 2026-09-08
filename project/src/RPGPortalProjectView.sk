@@ -587,7 +587,11 @@ class RPGPortalProjectView extends SKLibView
 			return;
 		}
 		local ret = Dialogs.progress( "$T.lbl_runrestore", ProjectOp.restoreFullProjectBackup( proj, fullbk));
-		if( ret){	//	キャンセルされる場合もあり、でもされたら壊れるな
+		if( ret instanceof Exception){
+			suspend();
+			// Popups.showError( tmpl( T.tmpl_error_popup, {v=ret.message}));
+			::rootview.postErrorEvent( {type="showDowngradeProject", error=ret, msg = tmpl( T.tmpl_error_popup, {v=ret.message}) });
+		}else{
 			proj.gittag = bktag;
 			projlist.refreshItems();
 			fullbk.deleteFile();	//	レストアできたらフルバックアップは消しちゃっていい

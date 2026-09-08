@@ -166,6 +166,11 @@ class ProjectOp
 		return _gitexe;
 	}
 
+	function rmdir( dir){
+		local r = ::exec( "cmd.exe", ["/c", "rd", "/s", "/q", dir.nativepath, ], true);
+		return r;
+	}
+	
 	//	
 	function getTempDir(){
 		local path = `${skGetCacheDir()}/temp/${string( skGetTime(), 16)}`;
@@ -435,7 +440,7 @@ class ProjectOp
 	function importBackup( zipfile, dst){
 		local projdir = FileRef( dst.projpath);
 		local gi = { tag=dst.rpgver.tag, repo=dst.rpgver.repo };
-		projdir.deleteAll();
+		rmdir( projdir);
 		projdir.mkdirs();
 		//
 		//	まずはprojdirにコピー。この時.gitはコピーせず、.gitignoreとかは専用のをコピー。
@@ -491,7 +496,7 @@ class ProjectOp
 	//	
 	function createProject( t){
 		local projdir = FileRef( t.projpath);
-		projdir.deleteAll();
+		rmdir( projdir);
 		projdir.mkdirs();
 		//
 		//	まずはprojdirにコピー。この時.gitはコピーせず、.gitignoreとかは専用のをコピー。
@@ -784,11 +789,11 @@ class ProjectOp
 	}
 	
 	function restoreProjectBackup( proj, zipfile){
-		local projdir = FileRef( proj.projpath);
+		local projdir = FileRef( proj.projpath), rmdir = rmdir;
 		local fn = @( prgfunc){
 			local zip = ZipReader( zipfile);
 			local outdir = FileRef( projdir, "project"), tmpdir = FileRef( skGetCacheDir().."/temp/restore");
-			if( tmpdir.exists()) tmpdir.deleteAll();
+			if( tmpdir.exists()) rmdir( tmpdir);
 			suspend();
 			tmpdir.mkdirs();
 			//	moveToは操作が早すぎると失敗するなー
@@ -843,7 +848,7 @@ class ProjectOp
 				}
 			}
 			zip.close();
-			tmpdir.deleteAll();
+			rmdir( tmpdir);
 		};
 		return fn;
 	}
@@ -903,7 +908,7 @@ class ProjectOp
 		local fn = @( prgfunc){
 			local zip = ZipReader( zipfile);
 			local outdir = projdir, tmpdir = FileRef( skGetCacheDir().."/temp/restore");
-			if( tmpdir.exists()) tmpdir.deleteAll();
+			if( tmpdir.exists()) rmdir( tmpdir);
 			suspend();
 			tmpdir.mkdirs();
 			//	moveToは操作が早すぎると失敗するなー
@@ -911,10 +916,14 @@ class ProjectOp
 				suspend();
 				printf( "file moving ... %S => %S\n", f0.path, f1.path);
 				for( local l = 0;l < 5;l ++){
-					if( f0.moveTo( f1)) return true;
+					try{
+						if( f0.moveTo( f1)) return true;
+					}catch( ex){
+						printf( "%S\n", ex);
+					}
 					sleep( 50);
 				}
-				throw Exception( "file move error %S => %S" % (f0.path, f1.path));
+				throw Exception( "File move error, from '%S' => to '%S'" % (f0.path, f1.path));
 			}
 			//	出力先をクリア。消せなかったら失敗。フルバックアップの場合はbackup,log,tmp以外は全て
 			//	※この処理は、出力先に元のファイルが残ってしまわないためのもの
@@ -954,7 +963,7 @@ class ProjectOp
 				}
 			}
 			zip.close();
-			tmpdir.deleteAll();
+			rmdir( tmpdir);
 		};
 		return fn;
 	}

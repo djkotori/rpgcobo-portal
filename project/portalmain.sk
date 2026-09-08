@@ -146,11 +146,11 @@ function mainCheck(){
 
 {
 	local t = Date.currentTime();
-	local lastchk = long( ::workspace["lastchk"]);
+	local lastchk = long( ::workspace["lastchk"]||0);
 	if( !::arguments.contains( "-nocheck")){
 		printf( "Autocheck for updates... now=%S last=%S dt=%S\n", t, lastchk, t-lastchk);
 		//	自動チェックの条件を確認
-		if( ::workspace["autochk"] && int( t-lastchk) > ::workspace.autochk){
+		if( ::workspace["autochk"] && t >= (lastchk+::workspace.autochk)){
 			mainCheck();
 		}
 	}
