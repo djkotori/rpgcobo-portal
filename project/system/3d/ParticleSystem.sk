@@ -280,7 +280,7 @@ class ParticleGroupData
 			m.alphatest = (blendmode%3)==1;
 			m.depthmask = (blendmode%3)==2?0:1;
 		}
-		if( !pm && tec){
+		if( setmaterial && tec){
 			local t = skFXFindTechnique( tec);
 			if( t) m.tec = t;
 		}

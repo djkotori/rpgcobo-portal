@@ -157,6 +157,7 @@ function mainCheck(){
 			mainCheck();
 		}
 	}
+	::account.checkAccountState( true);	//	アカウントの状態を確認する
 }
 
 

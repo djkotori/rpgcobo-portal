@@ -187,7 +187,12 @@ class RPGPortalView extends SKLibView
 			g.anime( 1);
 			g.setValue( "license", "$T.license_" .. (a.license["id"]||"free"));
 			g.setValue( "ticket", a.ticket_d);
-			if( a.iconbb && a.iconbb.size >= 100) g.setValue( "proficon", skLoadImage( a.iconbb));
+			if( a.iconbb && a.iconbb.size >= 100){
+				a.iconbb.pos = 0;
+				local img = skLoadImage( a.iconbb);
+				a.iconbb.pos = 0;
+				g.setValue( "proficon", img);
+			}
 			g.findChild( "col").setParam( SKViewPropertyID.BUFFERCOLOR, colmap[a.license["id"]]||0xff0000ff);
 			break;
 		default:
